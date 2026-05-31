@@ -38,7 +38,7 @@ $uni-border-color:#c8c7cc;
 
 /* 尺寸变量 */
 
-/* 文字尺寸 */
+$uni-bg-color-grey:#f6f8fb;
 $uni-font-size-sm:12px;
 $uni-font-size-base:14px;
 $uni-font-size-lg:16px;
@@ -56,9 +56,9 @@ $uni-border-radius-circle: 50%;
 
 /* 水平间距 */
 $uni-spacing-row-sm: 5px;
-$uni-spacing-row-base: 10px;
-$uni-spacing-row-lg: 15px;
-
+$uni-border-radius-sm: 6px;
+$uni-border-radius-base: 8px;
+$uni-border-radius-lg: 12px;
 /* 垂直间距 */
 $uni-spacing-col-sm: 4px;
 $uni-spacing-col-base: 8px;
