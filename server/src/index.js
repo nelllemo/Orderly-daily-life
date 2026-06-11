@@ -41,10 +41,11 @@ app.use('/api/ai', authMiddleware, aiRoutes)
 app.use('/api/schedules', authMiddleware, scheduleRoutes)
 app.use('/api/moments', authMiddleware, momentRoutes)
 
-// SPA fallback - all non-API routes serve index.html
+// SPA fallback - only for page routes, not static assets
 if (fs.existsSync(staticDir)) {
+  const staticExts = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json)$/i
   app.get('*', (req, res) => {
-    if (req.path.startsWith('/api/')) return
+    if (req.path.startsWith('/api/') || staticExts.test(req.path)) return
     res.sendFile(path.join(staticDir, 'index.html'))
   })
 }
