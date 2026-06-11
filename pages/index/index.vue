@@ -30,24 +30,41 @@
               <text class="day-label" v-for="d in days" :key="d">{{d}}</text>
             </view>
             <view class="dates-grid">
-              <view class="empty-cell" v-for="e in leadingEmptyCount" :key="'e'+e"></view>
-              <view
-                class="date-cell"
-                :class="{'is-today': getDateKeyForDay(date) === todayKey}"
-                v-for="date in monthDates"
-                :key="date"
-                @click="selectDate(date); openAddModal(date)"
-              >
-                <text class="date-num" :class="{'today-num': getDateKeyForDay(date) === todayKey}">{{date}}</text>
-                <view class="tags-row">
-                  <view
-                    v-for="color in getTagsForDate(date).slice(0, 3)"
-                    :key="color"
-                    class="tag-line"
-                    :style="{ backgroundColor: color }"
-                  ></view>
+              <template v-if="activeView === 'month'">
+                <view class="empty-cell" v-for="e in leadingEmptyCount" :key="'e'+e"></view>
+                <view
+                  class="date-cell"
+                  :class="{'is-today': getDateKeyForDay(date) === todayKey}"
+                  v-for="date in monthDates"
+                  :key="date"
+                  @click="selectDate(date); openAddModal(date)"
+                >
+                  <text class="date-num" :class="{'today-num': getDateKeyForDay(date) === todayKey}">{{date}}</text>
+                  <view class="tags-row">
+                    <view
+                      v-for="color in getTagsForDate(date).slice(0, 3)"
+                      :key="color"
+                      class="tag-line"
+                      :style="{ backgroundColor: color }"
+                    ></view>
+                  </view>
                 </view>
-              </view>
+              </template>
+              <template v-else-if="activeView === 'week'">
+                <view class="week-grid">
+                  <view class="date-cell" v-for="key in weekDatesKeys" :key="key" @click="selectDateByKey(key); openAddModal()">
+                    <text class="date-num" :class="{'today-num': key === todayKey}">{{ key.slice(8) }}</text>
+                    <view class="tags-row">
+                      <view
+                        v-for="color in scheduleTagsByDate[key] ? scheduleTagsByDate[key].slice(0,3) : []"
+                        :key="color"
+                        class="tag-line"
+                        :style="{ backgroundColor: color }"
+                      ></view>
+                    </view>
+                  </view>
+                </view>
+              </template>
             </view>
           </view>
 
@@ -120,11 +137,11 @@
               <view class="timeline-node node-blue"></view>
               <text class="section-title">今日剩余</text>
               <view class="task-list-timeline">
-                <view class="task-card" v-for="task in todayRemainingTasks" :key="task.id">
+                <view class="task-card" :class="{ 'card-completed': task.completed }" v-for="task in todayTasks" :key="task.id">
                   <text class="task-time-left">{{ task.time }}</text>
                   <view class="task-card-content">
                     <view class="task-info" @click="openEditModal(task)">
-                      <text class="task-title" :class="{'text-red': task.priority === 3}">{{ task.title }}</text>
+                      <text class="task-title" :class="{ 'text-red': task.priority === 3, 'line-through': task.completed }">{{ task.title }}</text>
                       <view class="task-tag" :style="{ color: task.color, backgroundColor: task.color + '20' }">
                         {{ task.categoryName }}
                       </view>
@@ -185,57 +202,95 @@
       </scroll-view>
 
       <!-- ========================================================================== -->
-      <!-- 3. 版块：生活动态视图 (原 DynamicsView.vue 整合) -->
+      <!-- 3. 版块：生活动态视图 (仿微信朋友圈竖版左侧日期) -->
       <!-- ========================================================================== -->
       <view v-else-if="activeTab === 'dynamics'" class="full-component-container">
-        <view class="dynamics-view">
-          <!-- 吸顶头部与日期筛选器 -->
-          <view class="sticky-header">
-            <view class="page-header">
-              <text class="page-title">生活动态</text>
-            </view>
-            
-            <!-- 日期横向筛选器 -->
-            <scroll-view scroll-x class="date-filter-scroll" :show-scrollbar="false">
-              <view class="date-filter-container">
-                <view 
-                  class="date-btn" 
-                  :class="{ 'date-active': activeDate === item.dateKey, 'date-today': item.isToday }"
-                  v-for="item in dynamicsDates" 
-                  :key="item.dateKey"
-                  @click="activeDate = item.dateKey"
-                >
-                  <text class="date-text">{{ item.isToday ? '今日' : item.label }}</text>
-                </view>
-              </view>
-            </scroll-view>
+        <view class="moments-view">
+          <!-- 顶部标题栏 -->
+          <view class="moments-top-bar">
+            <text class="moments-title">生活动态</text>
           </view>
 
           <!-- 动态时间线列表 -->
-          <scroll-view class="dynamics-scroll-area" scroll-y>
-            <view class="dynamics-list">
-              <view class="dynamic-card" v-for="dyn in filteredDynamics" :key="dyn.id">
-                <view class="dyn-header">
-                  <text class="dyn-time">{{ dyn.date.slice(5) }} · {{ dyn.time }}</text>
-                </view>
-                <text class="dyn-content">{{ dyn.content }}</text>
-                
-                <!-- 图片占位 -->
-                <view v-if="dyn.imageUrls && dyn.imageUrls.length" class="dyn-image-placeholder">
-                  <text class="icon-image">🖼️</text>
+          <scroll-view class="moments-scroll" scroll-y>
+            <view class="moments-list">
+
+              <view class="moment-card" v-for="dyn in moments" :key="dyn.id">
+                <!-- 左侧日期栏 -->
+                <view class="moment-date-col">
+                  <text class="moment-date-day">{{ dyn.date.slice(5) }}</text>
+                  <text class="moment-date-weekday">{{ weekdayLabel(dyn.date) }}</text>
                 </view>
 
-                <!-- 日程挂载UI -->
-                <view v-if="dyn.relatedScheduleId" class="dyn-schedule-link">
-                  <text class="link-icon">📎</text>
-                  <text class="link-text">关联: {{ scheduleTitleById[dyn.relatedScheduleId] || '已删除日程' }}</text>
+                <!-- 右侧内容区 -->
+                <view class="moment-main">
+                  <!-- 头部：头像 + 昵称 + 时间 -->
+                  <view class="moment-header">
+                    <view class="moment-avatar">
+                      <text class="moment-avatar-text">👤</text>
+                    </view>
+                    <view class="moment-header-info">
+                      <text class="moment-nickname">{{ session.email ? session.email.split('@')[0] : '我' }}</text>
+                      <text class="moment-time">{{ relativeTime(dyn.date, dyn.time) }}</text>
+                    </view>
+                  </view>
+
+                  <!-- 正文内容 -->
+                  <view class="moment-body">
+                    <text
+                      class="moment-content"
+                      :class="{ 'moment-content-folded': dyn.content && dyn.content.length > 140 && !expandedMoments[dyn.id] }"
+                    >{{ dyn.content }}</text>
+                    <text
+                      v-if="dyn.content && dyn.content.length > 140"
+                      class="moment-expand-btn"
+                      @click="toggleExpand(dyn.id)"
+                    >{{ expandedMoments[dyn.id] ? '收起' : '全文' }}</text>
+                  </view>
+
+                  <!-- 图片九宫格 -->
+                  <view v-if="dyn.imageUrls && dyn.imageUrls.length" :class="['moment-images-grid', 'grid-col-' + Math.min(dyn.imageUrls.length > 1 ? (dyn.imageUrls.length === 4 ? 2 : 3) : 1, 3)]">
+                    <view
+                      class="moment-image-wrap"
+                      :class="{ 'moment-image-single': dyn.imageUrls.length === 1 }"
+                      v-for="(img, idx) in dyn.imageUrls.slice(0,9)"
+                      :key="idx"
+                      @click="previewImages(dyn.imageUrls, img)"
+                    >
+                      <image :src="img" mode="aspectFill" class="moment-image" />
+                    </view>
+                  </view>
+
+                  <!-- 关联日程 -->
+                  <view v-if="dyn.relatedScheduleId" class="moment-schedule-link">
+                    <text class="moment-link-icon">📎</text>
+                    <text class="moment-link-text">{{ scheduleTitleById[dyn.relatedScheduleId] || '已删除日程' }}</text>
+                  </view>
+
+                  <!-- 底部操作栏 -->
+                  <view class="moment-actions">
+                    <view class="moment-action-item">
+                      <text class="moment-action-text">赞</text>
+                    </view>
+                    <view class="moment-action-item">
+                      <text class="moment-action-text">评论</text>
+                    </view>
+                  </view>
                 </view>
+              </view>
+
+              <!-- 空状态 -->
+              <view v-if="moments.length === 0" class="moments-empty">
+                <text class="empty-icon">📝</text>
+                <text class="empty-text">还没有动态，记录点什么吧</text>
               </view>
             </view>
           </scroll-view>
 
           <!-- 发布悬浮按钮 -->
-          <view class="fab-publish" @click="openPublishModal">+</view>
+          <view class="moments-fab" @click="openPublishModal">
+            <text class="moments-fab-icon">📷</text>
+          </view>
         </view>
       </view>
 
@@ -542,25 +597,100 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { toDateKey, toMonthLabel, addDays } from '../../services/date'
 import {
   getState,
   addSchedule,
-  updateSchedule,
-  deleteSchedule,
+  updateSchedule as updateScheduleLocal,
+  deleteSchedule as deleteScheduleLocal,
   toggleScheduleCompleted,
-  addMoment,
+  addMoment as addMomentLocal,
+  updateMoment as updateMomentLocal,
+  deleteMoment as deleteMomentLocal,
   updateSettings,
-  setSession,
+  updateState,
+  setSession as setSessionLocal,
   clearSession
 } from '../../services/storage'
-import { login, register, requestAISchedule, wechatLogin, createSchedule } from '../../services/api'
+import * as api from '../../services/api'
 
 const appState = ref(getState())
 
 const refreshState = () => {
   appState.value = getState()
+}
+
+const loadServerData = async () => {
+  if (session.value.isGuest || !session.value.token) return
+  try {
+    const [serverSchedules, serverMoments] = await Promise.all([
+      api.fetchSchedules(),
+      api.fetchMoments()
+    ])
+    if (serverSchedules && serverSchedules.length) {
+      const merged = serverSchedules.map(s => ({
+        id: String(s.id),
+        title: s.title,
+        date: s.date,
+        time: s.time,
+        categoryId: s.categoryId,
+        priority: s.priority,
+        remark: s.remark || '',
+        location: s.location || '',
+        completed: Boolean(s.completed),
+        remindAt: s.remindAt || null
+      }))
+      updateState(state => { state.schedules = merged; return state })
+    }
+    if (serverMoments && serverMoments.length) {
+      const merged = serverMoments.map(m => ({
+        id: String(m.id),
+        content: m.content,
+        date: m.date,
+        time: m.time,
+        relatedScheduleId: m.relatedScheduleId ? String(m.relatedScheduleId) : null,
+        imageUrls: m.imageUrls || []
+      }))
+      updateState(state => { state.moments = merged; return state })
+    }
+    refreshState()
+  } catch (e) {
+    console.error('Failed to load server data:', e)
+  }
+}
+
+const isLoggedIn = () => !session.value.isGuest && session.value.token
+
+const relativeTime = (dateStr, timeStr) => {
+  const target = new Date(`${dateStr}T${timeStr}`)
+  const now = new Date()
+  const diff = now - target
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (dateStr === `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`) return '昨天'
+  if (hours < 48) return '昨天'
+  return `${dateStr.slice(5)} ${timeStr.slice(0,5)}`
+}
+
+const expandedMoments = ref({})
+const toggleExpand = (id) => {
+  expandedMoments.value[id] = !expandedMoments.value[id]
+}
+
+const previewImages = (urls, current) => {
+  uni.previewImage({ urls, current })
+}
+
+const weekDayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const weekdayLabel = (dateStr) => {
+  const d = new Date(dateStr)
+  return weekDayNames[d.getDay()]
 }
 
 const activeTab = ref('calendar')
@@ -629,6 +759,30 @@ const monthDates = computed(() => Array.from({ length: monthDateCount.value }, (
 const getDateKeyForDay = (day) => {
   const date = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth(), day)
   return toDateKey(date)
+}
+
+// 计算选中日期所在周的日期键（从周日开始，7 天）
+const weekDatesKeys = computed(() => {
+  try {
+    const parts = selectedDate.value.split('-')
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+    const start = new Date(d)
+    start.setDate(d.getDate() - d.getDay())
+    const arr = []
+    for (let i = 0; i < 7; i += 1) {
+      const dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+      arr.push(toDateKey(dt))
+    }
+    return arr
+  } catch (e) {
+    return [selectedDate.value]
+  }
+})
+
+const selectDateByKey = (dateKey) => {
+  selectedDate.value = dateKey
+  const parts = dateKey.split('-')
+  currentMonth.value = new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
 }
 
 const scheduleTagsByDate = computed(() => {
@@ -741,19 +895,26 @@ const selectDate = (day) => {
   selectedDate.value = getDateKeyForDay(day)
 }
 
-const toggleTask = (task) => {
-  toggleScheduleCompleted(task.id)
-  refreshState()
-  uni.showToast({
-    title: task.completed ? '已重置事项' : '已完成事项',
-    icon: 'none'
-  })
+const toggleTask = async (task) => {
+  try {
+    if (isLoggedIn()) {
+      await api.updateSchedule(task.id, { completed: !task.completed })
+    }
+    toggleScheduleCompleted(task.id)
+    refreshState()
+    uni.showToast({
+      title: task.completed ? '已重置事项' : '已完成事项',
+      icon: 'none'
+    })
+  } catch (err) {
+    uni.showToast({ title: err.message || '操作失败', icon: 'none' })
+  }
 }
 
 const generateSchedule = () => {
   if (!aiText.value.trim()) return
   uni.showLoading({ title: '豆包AI正在解析...' })
-  requestAISchedule(aiText.value.trim())
+  api.requestAISchedule(aiText.value.trim())
     .then((data) => {
       // data may be { candidates: [...] } or simulated shape
       if (data && data.candidates && Array.isArray(data.candidates)) {
@@ -805,11 +966,11 @@ const confirmAISchedule = async () => {
   }
 
   try {
-    if (session.value && !session.value.isGuest && session.value.token) {
-      // call backend
-      await createSchedule(payload)
+    if (isLoggedIn()) {
+      const result = await api.createSchedule(payload)
+      payload.id = String(result.id)
+      addSchedule({ ...payload, completed: false })
     } else {
-      // local fallback
       addSchedule(payload)
     }
     refreshState()
@@ -821,7 +982,7 @@ const confirmAISchedule = async () => {
   }
 }
 
-const saveGeneralSchedule = () => {
+const saveGeneralSchedule = async () => {
   if (!newScheduleTitle.value.trim()) {
     uni.showToast({ title: '请输入日程标题', icon: 'none' })
     return
@@ -838,40 +999,71 @@ const saveGeneralSchedule = () => {
     remindAt: newScheduleRemindTime.value || null
   }
 
-  if (editingScheduleId.value) {
-    updateSchedule(editingScheduleId.value, payload)
-  } else {
-    addSchedule(payload)
+  try {
+    if (isEditingSchedule.value) {
+      if (isLoggedIn()) {
+        await api.updateSchedule(editingScheduleId.value, { ...payload, completed: false })
+      }
+      updateScheduleLocal(editingScheduleId.value, payload)
+    } else {
+      if (isLoggedIn()) {
+        const result = await api.createSchedule(payload)
+        payload.id = String(result.id)
+        addSchedule({ ...payload, completed: false })
+      } else {
+        addSchedule(payload)
+      }
+    }
+    refreshState()
+    showAddModal.value = false
+    editingScheduleId.value = null
+    uni.showToast({ title: '保存成功', icon: 'success' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '保存失败', icon: 'none' })
   }
-
-  refreshState()
-  showAddModal.value = false
-  editingScheduleId.value = null
-  uni.showToast({ title: '保存成功', icon: 'success' })
 }
 
-const removeSchedule = (scheduleId) => {
-  deleteSchedule(scheduleId)
-  refreshState()
-  uni.showToast({ title: '已删除日程', icon: 'none' })
+const removeSchedule = async (scheduleId) => {
+  try {
+    if (isLoggedIn()) {
+      await api.deleteSchedule(scheduleId)
+    }
+    deleteScheduleLocal(scheduleId)
+    refreshState()
+    uni.showToast({ title: '已删除日程', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '删除失败', icon: 'none' })
+  }
 }
 
-const saveNewDynamic = () => {
+const saveNewDynamic = async () => {
   if (!newDynamicText.value.trim()) {
     uni.showToast({ title: '请输入动态内容', icon: 'none' })
     return
   }
-  addMoment({
+  const now = new Date()
+  const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+  const payload = {
     content: newDynamicText.value,
-    date: activeDate.value,
-    time: '08:00',
+    date: todayKey,
+    time: timeStr,
     relatedScheduleId: relatedScheduleSelected.value || null,
     imageUrls: []
-  })
-  refreshState()
-  showPublishModal.value = false
-  activeDate.value = todayKey
-  uni.showToast({ title: '发布成功', icon: 'success' })
+  }
+  try {
+    if (isLoggedIn()) {
+      const result = await api.createMoment(payload)
+      payload.id = String(result.id)
+      addMomentLocal(payload)
+    } else {
+      addMomentLocal(payload)
+    }
+    refreshState()
+    showPublishModal.value = false
+    uni.showToast({ title: '发布成功', icon: 'success' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '发布失败', icon: 'none' })
+  }
 }
 
 const toggleSelectRelation = () => {
@@ -933,17 +1125,23 @@ const submitAuth = async () => {
       })
     })
 
-    const response = await wechatLogin(code)
-    setSession({ userId: response.user.id, token: response.token, email: response.user.email || null })
+    const response = await api.wechatLogin(code)
+    setSessionLocal({ userId: response.user.id, token: response.token, email: response.user.email || null })
     refreshState()
     showAuthModal.value = false
     uni.showToast({ title: '登录成功', icon: 'success' })
+    // Sync data from server after login
+    loadServerData()
   } catch (err) {
     uni.showToast({ title: err.message || '请求失败', icon: 'none' })
   } finally {
     authLoading.value = false
   }
 }
+
+onMounted(() => {
+  loadServerData()
+})
 </script>
 
 <style scoped>
@@ -1040,31 +1238,219 @@ const submitAuth = async () => {
 .circle-check { width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 50%; }
 .card-expired { background: #f9fafb; opacity: 0.7; }
 
-/* ==========================================================================
-   板块样式 3：生活动态
-   ========================================================================== */
-.dynamics-view { flex: 1; display: flex; flex-direction: column; height: 100%; background: #f8fafc; overflow: hidden; }
-.sticky-header { background: #fff; z-index: 10; box-shadow: 0 1px 2px rgba(0,0,0,0.02); flex-shrink: 0; }
-.date-filter-scroll { height: 44px; white-space: nowrap; padding-bottom: 4px; }
-.date-filter-container { display: flex; padding: 0 12px; gap: 8px; align-items: center; height: 100%; }
-.date-btn { width: 40px; height: 40px; background: #ffffff; border-radius: 8px; display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; border: 1px solid #f3f4f6; }
-.date-text { font-size: 12px; color: #666; font-weight: 500; }
-.date-active { background: #3B82F6; }
-.date-active .date-text { color: #fff; }
-.date-today { border: 1px solid #FFA500; }
+/* completed task dimming */
+.card-completed { opacity: 0.6; }
 
-.dynamics-scroll-area { flex: 1; overflow-y: auto; }
-.dynamics-list { padding: 16px; display: flex; flex-direction: column; gap: 16px; padding-bottom: 80px; }
-.dynamic-card { background: #fff; padding: 16px; border-radius: 18px; box-shadow: 0 10px 30px rgba(16,24,40,0.05); border: 1px solid #f3f4f6; transition: transform 0.14s ease; }
-.dynamic-card:hover { transform: translateY(-6px); }
-.dyn-header { margin-bottom: 12px; }
-.dyn-time { font-size: 12px; color: #9ca3af; font-weight: 500; }
-.dyn-content { font-size: 15px; color: #333; line-height: 1.5; margin-bottom: 12px; display: block; word-break: break-all; }
-.dyn-image-placeholder { width: 100%; height: 120px; background: #f3f4f6; border: 1px dashed #d1d5db; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin-bottom: 12px; font-size: 32px; }
-.dyn-schedule-link { display: inline-flex; align-items: center; gap: 4px; background: #f0f7ff; border: 1px solid #e0f2fe; padding: 6px 10px; border-radius: 6px; }
-.link-icon { font-size: 12px; }
-.link-text { font-size: 11px; color: #3B82F6; font-weight: 500; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fab-publish { position: fixed; right: 16px; bottom: 84px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg,#4A90E2 0%, #3B82F6 100%); color: #fff; display: flex; justify-content: center; align-items: center; box-shadow: 0 12px 30px rgba(59,130,246,0.22); font-size: 28px; z-index: 10; }
+/* week grid */
+.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.week-grid .date-cell { padding: 10px; background: #fff; border-radius: 10px; border: 1px solid #f3f4f6; display: flex; flex-direction: column; align-items: center; }
+
+/* ==========================================================================
+   板块样式 3：生活动态 (竖版左侧日期布局)
+   ========================================================================== */
+.moments-view { flex: 1; display: flex; flex-direction: column; height: 100%; background: #ededed; overflow: hidden; }
+
+/* 顶部标题栏 */
+.moments-top-bar { padding: 16px 20px 12px; background: #ededed; flex-shrink: 0; }
+.moments-title { font-size: 18px; font-weight: 700; color: #1a1a1a; display: block; }
+
+.moments-scroll { flex: 1; overflow-y: auto; }
+.moments-list { padding: 0 12px 80px 12px; }
+
+/* 卡片 - 左侧日期 + 右侧内容 */
+.moment-card {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  background: #fff;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  padding: 14px 0;
+}
+
+/* 左侧日期栏 */
+.moment-date-col {
+  width: 52px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 2px;
+}
+.moment-date-day {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.2;
+}
+.moment-date-weekday {
+  font-size: 11px;
+  color: #999;
+  margin-top: 1px;
+}
+
+/* 右侧主内容 */
+.moment-main {
+  flex: 1;
+  min-width: 0;
+  padding-right: 12px;
+}
+
+/* 头部：头像 + 昵称 + 时间 */
+.moment-header {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+.moment-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 4px;
+  background: #e5e5e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.moment-avatar-text { font-size: 20px; }
+.moment-header-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 38px;
+}
+.moment-nickname {
+  font-size: 14px;
+  font-weight: 600;
+  color: #576b95;
+  margin-bottom: 1px;
+  line-height: 1.3;
+}
+.moment-time {
+  font-size: 11px;
+  color: #9a9a9a;
+  line-height: 1.3;
+}
+
+/* 正文 */
+.moment-body {
+  margin-left: 46px;
+  margin-bottom: 6px;
+}
+.moment-content {
+  font-size: 15px;
+  color: #1f1f1f;
+  line-height: 1.55;
+  word-break: break-all;
+  white-space: pre-wrap;
+  display: block;
+}
+.moment-content-folded {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+.moment-expand-btn {
+  font-size: 14px;
+  color: #576b95;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+/* 图片九宫格 */
+.moment-images-grid {
+  margin-left: 46px;
+  margin-bottom: 6px;
+  display: grid;
+  gap: 2px;
+  max-width: 220px;
+}
+.grid-col-1 { grid-template-columns: 1fr; max-width: 170px; }
+.grid-col-2 { grid-template-columns: repeat(2, 1fr); max-width: 190px; }
+.grid-col-3 { grid-template-columns: repeat(3, 1fr); max-width: 220px; }
+
+.moment-image-wrap {
+  width: 100%;
+  padding-top: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #f0f0f0;
+}
+.moment-image-single {
+  padding-top: 75%;
+  max-width: 170px;
+}
+.moment-image {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 关联日程 */
+.moment-schedule-link {
+  margin-left: 46px;
+  margin-bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  padding: 5px 8px;
+  max-width: 230px;
+}
+.moment-link-icon { font-size: 12px; }
+.moment-link-text {
+  font-size: 12px;
+  color: #576b95;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* 底部操作栏 */
+.moment-actions {
+  margin-left: 46px;
+  margin-top: 2px;
+  padding-top: 8px;
+  display: flex;
+  gap: 20px;
+  position: relative;
+}
+.moment-actions::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 16px;
+  height: 0.5px;
+  background: #e5e5e5;
+}
+.moment-action-item { display: flex; align-items: center; }
+.moment-action-text { font-size: 13px; color: #999; }
+
+/* 空状态 */
+.moments-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 20px;
+  background: #fff;
+  border-radius: 4px;
+}
+.empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+.empty-text { font-size: 14px; color: #999; }
+
+/* FAB 发布按钮 */
+.moments-fab { position: fixed; right: 18px; bottom: 84px; width: 50px; height: 50px; border-radius: 50%; background: #07c160; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 12px rgba(7,193,96,0.3); z-index: 10; }
+.moments-fab-icon { color: #fff; font-size: 22px; }
 
 /* ==========================================================================
    板块样式 4：个人中心
