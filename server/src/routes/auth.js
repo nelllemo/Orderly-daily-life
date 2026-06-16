@@ -1,7 +1,9 @@
 const express = require('express')
 const axios = require('axios')
 const jwt = require('jsonwebtoken')
+const bcrypt = require('bcryptjs')
 const db = require('../db')
+const authMiddleware = require('../middleware/auth')
 
 const router = express.Router()
 
@@ -10,10 +12,78 @@ const signToken = (payload) => {
   return jwt.sign(payload, secret, { expiresIn: '7d' })
 }
 
-// POST /api/auth/wechat
-// body: { code }
-// exchanges code for openid, upserts user, returns token
-router.post('/wechat', async (req, res) => {
+// POST /api/auth/register
+router.post('/register', async (req, res, next) => {
+  try {
+    const { email, password, nickname, bio, goals, skills, interests } = req.body || {}
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required.' })
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'Invalid email format.' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters.' })
+    }
+
+    const existing = await db.query('SELECT id FROM user WHERE email = ?', [email])
+    if (existing.length) {
+      return res.status(409).json({ message: 'Email already registered.' })
+    }
+
+    const hash = await bcrypt.hash(password, 10)
+    const displayName = nickname || email.split('@')[0]
+    const userBio = bio || ''
+    const userGoals = goals || ''
+    const userSkills = skills || ''
+    const userInterests = interests || ''
+    const result = await db.query(
+      'INSERT INTO user (email, password_hash, nickname, avatar, bio, goals, skills, interests) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [email, hash, displayName, '', userBio, userGoals, userSkills, userInterests]
+    )
+
+    const userId = result.insertId
+    const token = signToken({ userId, email, nickname: displayName })
+    return res.status(201).json({
+      token,
+      user: { id: userId, email, nickname: displayName, avatar: '', bio: userBio, goals: userGoals, skills: userSkills, interests: userInterests }
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/login
+router.post('/login', async (req, res, next) => {
+  try {
+    const { email, password } = req.body || {}
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required.' })
+    }
+
+    const rows = await db.query('SELECT id, email, password_hash, nickname, avatar, bio, goals, skills, interests FROM user WHERE email = ?', [email])
+    if (!rows.length) {
+      return res.status(401).json({ message: 'Invalid email or password.' })
+    }
+
+    const user = rows[0]
+    const match = await bcrypt.compare(password, user.password_hash)
+    if (!match) {
+      return res.status(401).json({ message: 'Invalid email or password.' })
+    }
+
+    const token = signToken({ userId: user.id, email: user.email, nickname: user.nickname })
+    return res.json({
+      token,
+      user: { id: user.id, email: user.email, nickname: user.nickname || '', avatar: user.avatar || '', bio: user.bio || '', goals: user.goals || '', skills: user.skills || '', interests: user.interests || '' }
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/wechat (微信登录保留兼容)
+router.post('/wechat', async (req, res, next) => {
   const { code } = req.body || {}
   if (!code) return res.status(400).json({ message: 'code required' })
 
@@ -28,21 +98,53 @@ router.post('/wechat', async (req, res) => {
     if (data.errcode) return res.status(502).json({ message: data.errmsg })
 
     const openid = data.openid
-
-    // upsert user by openid
-    const rows = await db.query('SELECT id FROM user WHERE openid = ?', [openid])
-    let userId
+    const rows = await db.query('SELECT id, email, nickname, avatar FROM user WHERE openid = ?', [openid])
+    let user
     if (rows.length) {
-      userId = rows[0].id
+      user = rows[0]
     } else {
-      const result = await db.query('INSERT INTO user (openid) VALUES (?)', [openid])
-      userId = result.insertId
+      const result = await db.query('INSERT INTO user (openid, nickname, avatar) VALUES (?, ?, ?)', [openid, '', ''])
+      user = { id: result.insertId, email: null, nickname: '', avatar: '' }
     }
 
-    const token = signToken({ userId, openid })
-    return res.json({ token, user: { id: userId, openid } })
+    const token = signToken({ userId: user.id, openid, email: user.email, nickname: user.nickname })
+    return res.json({ token, user: { id: user.id, email: user.email, nickname: user.nickname || '', avatar: user.avatar || '' } })
   } catch (err) {
-    return res.status(500).json({ message: 'WeChat exchange failed', error: err.message })
+    next(err)
+  }
+})
+
+// GET /api/auth/profile
+router.get('/profile', authMiddleware, async (req, res, next) => {
+  try {
+    const rows = await db.query('SELECT id, email, nickname, avatar, bio, goals, skills, interests FROM user WHERE id = ?', [req.user.userId])
+    if (!rows.length) return res.status(404).json({ message: 'User not found.' })
+    return res.json(rows[0])
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/auth/profile
+router.put('/profile', authMiddleware, async (req, res, next) => {
+  try {
+    const { nickname, avatar, bio, goals, skills, interests } = req.body || {}
+    const fields = []
+    const values = []
+    if (nickname !== undefined) { fields.push('nickname = ?'); values.push(nickname) }
+    if (avatar !== undefined) { fields.push('avatar = ?'); values.push(avatar) }
+    if (bio !== undefined) { fields.push('bio = ?'); values.push(bio) }
+    if (goals !== undefined) { fields.push('goals = ?'); values.push(goals) }
+    if (skills !== undefined) { fields.push('skills = ?'); values.push(skills) }
+    if (interests !== undefined) { fields.push('interests = ?'); values.push(interests) }
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No fields to update.' })
+    }
+    values.push(req.user.userId)
+    await db.query(`UPDATE user SET ${fields.join(', ')} WHERE id = ?`, values)
+    return res.json({ ok: true })
+  } catch (err) {
+    next(err)
   }
 })
 

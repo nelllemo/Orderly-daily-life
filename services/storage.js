@@ -6,7 +6,7 @@ const createDefaultState = () => {
   const today = new Date()
   const todayKey = toDateKey(today)
   const tomorrowKey = toDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1))
-  const yesterdayKey = toDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2))
+  const yesterdayKey = toDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1))
 
   return {
     users: [],
@@ -14,6 +14,12 @@ const createDefaultState = () => {
       userId: null,
       token: null,
       email: null,
+      nickname: '',
+      avatar: '',
+      bio: '',
+      goals: '',
+      skills: '',
+      interests: '',
       isGuest: true
     },
     categories: [
@@ -86,7 +92,7 @@ const createDefaultState = () => {
         date: toDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)),
         time: '21:00',
         relatedScheduleId: null,
-        imageUrls: ['placeholder']
+        imageUrls: []
       }
     ],
     settings: {
@@ -172,7 +178,13 @@ export const addMoment = (payload) => updateState((state) => {
     relatedScheduleId: payload.relatedScheduleId || null,
     imageUrls: payload.imageUrls || []
   }
-  state.moments = [moment, ...state.moments]
+  const moments = [...state.moments, moment]
+  moments.sort((a, b) => {
+    const da = `${a.date}T${a.time || '00:00'}`
+    const db = `${b.date}T${b.time || '00:00'}`
+    return db.localeCompare(da)
+  })
+  state.moments = moments
   return state
 })
 
@@ -197,10 +209,15 @@ export const setSession = (payload) => updateState((state) => {
   state.session = {
     userId: payload.userId,
     token: payload.token,
-    email: payload.email,
+    email: payload.email || null,
+    nickname: payload.nickname || '',
+    avatar: payload.avatar || '',
+    bio: payload.bio || '',
+    goals: payload.goals || '',
+    skills: payload.skills || '',
+    interests: payload.interests || '',
     isGuest: false
   }
-  // also save token for quick access by API helper
   if (payload.token) uni.setStorageSync('orderlyDailyLife:token', payload.token)
   return state
 })
@@ -210,6 +227,12 @@ export const clearSession = () => updateState((state) => {
     userId: null,
     token: null,
     email: null,
+    nickname: '',
+    avatar: '',
+    bio: '',
+    goals: '',
+    skills: '',
+    interests: '',
     isGuest: true
   }
   uni.removeStorageSync('orderlyDailyLife:token')

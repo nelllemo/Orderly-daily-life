@@ -1,2 +1,5 @@
 # Build output
 unpackage/
+
+# Sensitive config
+server/.env

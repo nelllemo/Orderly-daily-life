@@ -1,222 +1,352 @@
 const express = require('express')
 const axios = require('axios')
+const db = require('../db')
+const authMiddleware = require('../middleware/auth')
 
 const router = express.Router()
 
-// Try to extract JSON block from a textual response
-const extractJsonFromText = (text) => {
-  if (!text || typeof text !== 'string') return null
-  // first try to find {...} or [...] blocks
-  const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/) 
-  if (jsonMatch) {
-    try {
-      return JSON.parse(jsonMatch[0])
-    } catch (e) {
-      return null
-    }
-  }
-  return null
-}
-
-// Parse common Chinese date/time phrases into concrete date/time
-const parseChineseDateTime = (text) => {
-  const now = new Date()
-
-  // helper: next weekday (0=Sun..6=Sat)
-  const nextWeekday = (weekday) => {
+// POST /api/ai/chat
+// body: { messages: [{role,content},...], schedules: [...] }
+// Returns: { reply: string, proposal: null | { title, date, time, priority, remark, location } }
+router.post('/chat', async (req, res, next) => {
+  const { messages = [], schedules = [] } = req.body || {}
+  if (!messages.length) {
     const today = new Date()
-    const todayW = today.getDay()
-    let target = weekday
-    let delta = (target - todayW + 7) % 7
-    if (delta === 0) delta = 7 // next week same day
-    const d = new Date(today)
-    d.setDate(today.getDate() + delta)
-    return d
+    const todayStr = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`
+    const reply = buildLocalReply([], [], todayStr)
+    return res.json({ reply, proposal: null })
   }
-
-  // date patterns
-  const ymd = text.match(/(\d{4}-\d{1,2}-\d{1,2})/)
-  if (ymd) return { date: ymd[0] }
-
-  const cnMonthDay = text.match(/(\d{1,2})月(\d{1,2})日/)
-  if (cnMonthDay) {
-    const mm = Number(cnMonthDay[1])
-    const dd = Number(cnMonthDay[2])
-    const year = now.getFullYear()
-    const d = new Date(year, mm - 1, dd)
-    return { date: d.toISOString().slice(0, 10) }
-  }
-
-  if (/今天/.test(text)) return { date: now.toISOString().slice(0, 10) }
-  if (/明天/.test(text)) {
-    const d = new Date(now); d.setDate(now.getDate() + 1); return { date: d.toISOString().slice(0, 10) }
-  }
-  if (/后天/.test(text)) {
-    const d = new Date(now); d.setDate(now.getDate() + 2); return { date: d.toISOString().slice(0, 10) }
-  }
-
-  // weekdays: 周一..周日 或 星期一..星期日
-  const wk = text.match(/(?:下?周|周|星期)([一二三四五六日天])/)
-  if (wk) {
-    const map = { 一:1, 二:2, 三:3, 四:4, 五:5, 六:6, 日:0, 天:0 }
-    const w = map[wk[1]]
-    const d = nextWeekday(w)
-    return { date: d.toISOString().slice(0,10) }
-  }
-
-  return null
-}
-
-// Parse time like 14:30, 2点, 下午3点半, 上午9点
-const parseChineseTime = (text) => {
-  const hm = text.match(/(\d{1,2}:\d{2})/)
-  if (hm) return { time: hm[0] }
-
-  const hOnly = text.match(/(上午|下午|中午|傍晚)?\s*(\d{1,2})点(?:半|30)?/)
-  if (hOnly) {
-    let hour = Number(hOnly[2])
-    const period = hOnly[1]
-    if (period === '下午' || period === '傍晚') hour = (hour % 12) + 12
-    const minute = /半|30/.test(hOnly[0]) ? '30' : '00'
-    return { time: `${String(hour).padStart(2,'0')}:${minute}` }
-  }
-
-  return null
-}
-
-// Try to split plain text into candidate lines and extract date/time/title
-const parseTextToCandidates = (text, prompt) => {
-  if (!text || !text.trim()) return []
-  // split by newline or Chinese punctuation
-  const parts = text.split(/\n|；|;|。|\.|\uFF1B/).map(s => s.trim()).filter(Boolean)
-  const candidates = []
-  for (const part of parts) {
-    // try to find date/time in the part
-    const dt = parseChineseDateTime(part) || parseChineseDateTime(prompt) || {}
-    const tm = parseChineseTime(part) || parseChineseTime(prompt) || {}
-    // title: remove date/time phrases heuristically
-    let title = part.replace(/\d{4}-\d{1,2}-\d{1,2}/g, '').replace(/\d{1,2}月\d{1,2}日/g, '')
-    title = title.replace(/(?:下?周|周|星期)[一二三四五六日天]/g, '').replace(/(?:明天|后天|今天)/g, '')
-    title = title.replace(/(?:上午|下午|中午|傍晚)?\s*\d{1,2}点(?:半|30)?/g, '').trim()
-    if (!title) title = prompt.slice(0, 80)
-
-    const candidate = {
-      title: title.slice(0, 200),
-      date: dt.date || null,
-      time: tm.time || null,
-      priority: 2,
-      remark: '',
-      raw: part
-    }
-    candidates.push(candidate)
-  }
-  return candidates
-}
-
-// POST /ai/schedule
-// body: { prompt }
-// Returns structured schedule candidates or fallback text/raw response
-router.post('/schedule', async (req, res) => {
-  const { prompt } = req.body || {}
-  if (!prompt) return res.status(400).json({ message: 'Prompt is required.' })
 
   const endpoint = process.env.AI_ENDPOINT
   const apiKey = process.env.AI_API_KEY
-  const model = process.env.AI_MODEL || 'glm-5'
+  const model = process.env.AI_MODEL || 'qwen-plus'
 
-  // If not configured, return a simulated candidate to allow frontend testing
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`
+  const weekDay = ['周日','周一','周二','周三','周四','周五','周六'][today.getDay()]
+
+  // Build existing schedule summary for AI context
+  const scheduleSummary = schedules.length
+    ? schedules.map(s => `- [${s.date}] ${s.time} ${s.title}${s.location ? ' @'+s.location : ''}（${s.completed ? '已完成' : '未完成'}）`).join('\n')
+    : '（暂无日程）'
+
+  const systemPrompt = `你是一个贴心的日程助手，名字叫"小日"。今天是${todayStr} ${weekDay}。
+
+你的工作流程：
+1. 主动询问用户最近有没有新的日程安排
+2. 用户描述后，先检查下面的「用户现有日程」是否已存在相同或冲突的安排
+3. 如果日程信息不完整（缺少时间、地点等），友好地追问用户
+4. 确认所有必要信息后，帮用户整理好日程
+
+用户现有日程：
+${scheduleSummary}
+
+重要规则：
+- 语气温暖、简洁，不要长篇大论
+- 识别用户的日期表达（明天、下周五、6月20日等），结合今天是${todayStr}来计算具体日期
+- 当你确认可以添加日程时，在回复末尾附上一个 JSON 代码块，格式：
+\`\`\`schedule
+{"title":"日程标题","date":"YYYY-MM-DD","time":"HH:mm","priority":2,"remark":"备注","location":"地点"}
+\`\`\`
+- priority: 1低 2中 3高
+- 只在确认信息完整时才输出 schedule 代码块
+- 如果用户说的日程已存在，告诉用户并询问是否要修改`
+
+  const apiMessages = [
+    { role: 'system', content: systemPrompt },
+    ...messages
+  ]
+
+  // If no AI config, use local fallback
   if (!endpoint || !apiKey) {
-    // simulated structured result
-    const simulated = [
-      {
-        title: '示例：下午完成项目报告',
-        date: new Date().toISOString().slice(0, 10),
-        time: '15:00',
-        priority: 2,
-        remark: '根据输入示例生成的日程样本',
-        repeat: null
-      }
-    ]
-    return res.status(200).json({ simulated: true, candidates: simulated })
+    const reply = buildLocalReply(messages, schedules, todayStr)
+    const proposal = extractProposal(reply)
+    return res.json({ reply, proposal })
   }
 
   try {
-    const payload = {
-      model,
-      // many compatible-mode endpoints accept `input` or `messages`; include both in case
-      input: prompt,
-      prompt
-    }
+    const apiUrl = endpoint.endsWith('/v1') ? `${endpoint}/chat/completions` : endpoint
 
-    const r = await axios.post(endpoint, payload, {
+    const r = await axios.post(apiUrl, {
+      model,
+      messages: apiMessages,
+      temperature: 0.7,
+      max_tokens: 1000
+    }, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      timeout: 15000
+      timeout: 45000
     })
 
-    const data = r.data
+    const choice = r.data?.choices?.[0]
+    const msg = choice?.message
+    const reply = (typeof msg === 'string') ? msg : (msg?.content || '抱歉，我没有理解，请再说一遍～')
 
-    // Try multiple known shapes: data.choices[0].text, data.output, data.result, data
-    let text = null
-    if (data == null) {
-      return res.status(502).json({ message: 'Empty response from AI provider.' })
-    }
+    const proposal = extractProposal(reply)
+    return res.json({ reply, proposal })
 
-    if (typeof data === 'string') text = data
-    else if (data.choices && data.choices[0] && (data.choices[0].text || data.choices[0].message)) {
-      text = data.choices[0].text || data.choices[0].message
-    } else if (data.output) {
-      // some providers return { output: [{ content: '...' }] }
-      if (Array.isArray(data.output)) text = data.output.map(o => (o.content || o)).join('\n')
-      else text = data.output.content || JSON.stringify(data.output)
-    } else if (data.result) text = data.result
-    else if (data.data && data.data[0] && data.data[0].text) text = data.data[0].text
-    else text = typeof data === 'object' ? JSON.stringify(data) : String(data)
-
-    // attempt to extract structured JSON from the returned text
-    const maybeJson = extractJsonFromText(text)
-    if (maybeJson) {
-      // if it's an object, normalize to array of candidates
-      const candidates = Array.isArray(maybeJson) ? maybeJson : [maybeJson]
-      return res.json({ candidates })
-    }
-
-    // if not JSON, try to parse plain text into structured candidates
-    const parsed = parseTextToCandidates(text, prompt)
-    if (parsed && parsed.length) return res.json({ candidates: parsed })
-
-    // fallback: simple single candidate using lightweight heuristics
-    const timeMatch = text.match(/(\d{1,2}:\d{2})/)
-    const dateMatch = text.match(/(\d{4}-\d{2}-\d{2})/)
-    const title = text.split('\n').slice(0, 2).join(' ').slice(0, 200)
-
-    const candidate = {
-      title: title || prompt,
-      date: dateMatch ? dateMatch[0] : new Date().toISOString().slice(0, 10),
-      time: timeMatch ? timeMatch[0] : null,
-      priority: 2,
-      remark: text.slice(0, 200),
-      raw: text
-    }
-
-    return res.json({ candidates: [candidate] })
   } catch (err) {
-    // If provider error, return simulated fallback along with error info
-    const simulated = [
-      {
-        title: '示例：下午完成项目报告',
-        date: new Date().toISOString().slice(0, 10),
-        time: '15:00',
-        priority: 2,
-        remark: 'AI 服务调用失败，返回模拟结果',
-        repeat: null
-      }
-    ]
-    console.error('AI proxy error:', err.message || err)
-    return res.status(502).json({ message: 'AI provider error', error: err.message, simulated: true, candidates: simulated })
+    console.error('AI chat error:', err.response?.status, err.message, err.response?.data ? JSON.stringify(err.response.data).slice(0, 200) : '')
+    const reply = buildLocalReply(messages, schedules, todayStr)
+    const proposal = extractProposal(reply)
+    return res.json({ reply, proposal, fallback: true })
   }
 })
+
+// Extract schedule JSON block from AI reply
+const extractProposal = (text) => {
+  if (!text || typeof text !== 'string') return null
+  const match = text.match(/```schedule\s*([\s\S]*?)```/)
+  if (!match) return null
+  try {
+    return JSON.parse(match[1].trim())
+  } catch (e) {
+    return null
+  }
+}
+
+// Local fallback when AI is unavailable
+const parseRelativeDate = (text, today) => {
+  const y = today.getFullYear()
+  const m = today.getMonth() + 1
+  const d = today.getDate()
+  const dayOfWeek = today.getDay() // 0=Sun
+
+  // Explicit date: 2026-06-16 or 6月20日
+  let match = text.match(/(\d{4})[年-](\d{1,2})[月-](\d{1,2})/)
+  if (match) {
+    return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`
+  }
+  match = text.match(/(\d{1,2})月(\d{1,2})/)
+  if (match) {
+    return `${y}-${String(match[1]).padStart(2, '0')}-${String(match[2]).padStart(2, '0')}`
+  }
+
+  if (/今天/.test(text)) return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  if (/明天/.test(text)) {
+    const tm = new Date(today); tm.setDate(tm.getDate() + 1)
+    return `${tm.getFullYear()}-${String(tm.getMonth()+1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+  }
+  if (/后天/.test(text)) {
+    const tm = new Date(today); tm.setDate(tm.getDate() + 2)
+    return `${tm.getFullYear()}-${String(tm.getMonth()+1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+  }
+
+  // Weekday: 下周一, 下周三, 周五 (this week or next)
+  const weekMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '天': 0, '日': 0 }
+  match = text.match(/下周([一二三四五六日天])/)
+  if (match) {
+    const target = weekMap[match[1]]
+    const delta = (target - dayOfWeek + 7) % 7 + 7 // next week
+    const tm = new Date(today); tm.setDate(tm.getDate() + delta)
+    return `${tm.getFullYear()}-${String(tm.getMonth()+1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+  }
+  match = text.match(/周([一二三四五六日天])/)
+  if (match) {
+    const target = weekMap[match[1]]
+    const delta = (target - dayOfWeek + 7) % 7
+    const tm = new Date(today); tm.setDate(tm.getDate() + (delta === 0 ? 0 : delta))
+    return `${tm.getFullYear()}-${String(tm.getMonth()+1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+  }
+
+  return null
+}
+
+const parseRelativeTime = (text) => {
+  // Explicit: 15:00, 9:30
+  let match = text.match(/(\d{1,2}):(\d{2})/)
+  if (match) {
+    return `${String(match[1]).padStart(2, '0')}:${match[2]}`
+  }
+  // 下午3点, 上午10点, 晚上8点
+  match = text.match(/(上午|下午|晚上|中午|早上)(\d{1,2})点/)
+  if (match) {
+    let h = parseInt(match[2])
+    const period = match[1]
+    if (period === '下午' && h < 12) h += 12
+    if (period === '晚上' && h < 12) h += 12
+    if (period === '中午' && h < 12) h += 12  // 中午12点 = 12:00
+    return `${String(h).padStart(2, '0')}:00`
+  }
+  // Just: 3点 (ambiguous, default to afternoon if < 6, else morning)
+  match = text.match(/(\d{1,2})点/)
+  if (match) {
+    let h = parseInt(match[1])
+    if (h < 6) h += 12 // assume afternoon/evening for 1-5点
+    return `${String(h).padStart(2, '0')}:00`
+  }
+  // Just period: 下午, 上午
+  if (/上午/.test(text)) return '09:00'
+  if (/下午/.test(text)) return '15:00'
+  if (/晚上/.test(text)) return '19:00'
+  if (/中午/.test(text)) return '12:00'
+  return null
+}
+
+const extractTitle = (text) => {
+  return text
+    .replace(/今天|明天|后天|下周[一二三四五六日天]|周[一二三四五六日天]/g, '')
+    .replace(/\d{4}[年-]\d{1,2}[月-]\d{1,2}[日号]/g, '')
+    .replace(/\d{1,2}月\d{1,2}[日号]/g, '')
+    .replace(/上午\d{1,2}点|下午\d{1,2}点|晚上\d{1,2}点|早上\d{1,2}点|中午\d{1,2}点|\d{1,2}点半?/g, '')
+    .replace(/\d{1,2}:\d{2}/g, '')
+    .replace(/在|去|到/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60) || '新日程'
+}
+
+const buildLocalReply = (messages, schedules, todayStr) => {
+  const lastUser = [...messages].reverse().find(m => m.role === 'user')
+  const userText = lastUser?.content || ''
+
+  if (!userText) {
+    return `你好呀！我是你的日程助手小日 🌟\n\n今天是${todayStr}，最近有什么新的日程安排吗？可以告诉我你想做什么、什么时候、在哪里，我帮你整理到日历中～`
+  }
+
+  const today = new Date()
+  const hasDate = /今天|明天|后天|下周|周[一二三四五六日天]|\d+月\d+日|\d+\.\d+|\d{4}-\d{2}-\d{2}/.test(userText)
+  const hasTime = /\d+点|\d+:\d+|上午|下午|晚上|早上|中午/.test(userText)
+  const hasPlace = /在|去|到|图书馆|教室|办公室|家|餐厅|咖啡|店|超市|商场|医院|学校/.test(userText)
+
+  if (!hasTime && !hasDate) {
+    return `好的，我记下了你想做的事情～不过我还想知道：你打算什么时候做呢？比如"明天下午3点"这样告诉我～`
+  }
+
+  if (!hasPlace && /开会|见面|聚餐|吃饭|学习/.test(userText)) {
+    return `收到！不过这个活动有具体的地点吗？比如"在图书馆"、"在会议室"这样，方便我帮你记录得更加完整～`
+  }
+
+  if (hasDate || hasTime) {
+    const date = parseRelativeDate(userText, today) || `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+    const time = parseRelativeTime(userText) || '09:00'
+    const title = extractTitle(userText)
+
+    return `好的，我帮你整理好了这个日程：\n\n📅 ${title}\n🕐 ${date} ${time}\n\n确认无误的话，点击下方按钮添加到日历吧～\n\`\`\`schedule\n{"title":"${title}","date":"${date}","time":"${time}","priority":2,"remark":"","location":""}\n\`\`\``
+  }
+
+  return `明白了！不过我还有些信息需要确认，能再详细说说时间或地点吗？😊`
+}
+
+// POST /api/ai/resume — generate personal growth resume from user data
+router.post('/resume', authMiddleware, async (req, res, next) => {
+  try {
+    const userId = req.user.userId
+
+    // Fetch user profile with new fields
+    const users = await db.query(
+      'SELECT id, email, nickname, avatar, bio, goals, skills, interests FROM user WHERE id = ?',
+      [userId]
+    )
+    if (!users.length) return res.status(404).json({ message: 'User not found.' })
+    const profile = users[0]
+
+    // Fetch completed schedules
+    const schedules = await db.query(
+      'SELECT title, date, time, remark, location FROM schedule WHERE user_id = ? AND completed = 1 ORDER BY date DESC LIMIT 20',
+      [userId]
+    )
+
+    // Fetch recent moments
+    const moments = await db.query(
+      'SELECT content, date FROM moment WHERE user_id = ? ORDER BY date DESC LIMIT 10',
+      [userId]
+    )
+
+    // Use local fallback (AI call is async-optional for future enhancement)
+    // The local fallback produces quality results from user's own data
+    return res.json(buildLocalResume(profile, schedules, moments))
+  } catch (err) {
+    console.error('Resume generation error:', err.message)
+    next(err)
+  }
+})
+
+// Local fallback resume generator
+const buildLocalResume = (profile, schedules, moments) => {
+  // Build skill tags from profile skills + extract keywords from schedule titles
+  const skillTags = []
+  if (profile.skills) {
+    profile.skills.split(/[,，、\s]+/).filter(Boolean).forEach(s => {
+      if (s && !skillTags.includes(s)) skillTags.push(s)
+    })
+  }
+  // Extract keywords from completed schedule titles
+  const keywordMap = {
+    '学习': '学习', '考试': '考试', '复习': '复习', '课程': '课程',
+    '项目': '项目管理', '答辩': '答辩', '论文': '论文写作', '报告': '报告',
+    '运动': '运动', '跑步': '跑步', '健身': '健身', '游泳': '游泳',
+    '编程': '编程', '代码': '编程', '开发': '开发', '设计': '设计',
+    '兼职': '兼职', '实习': '实习', '工作': '工作',
+    '阅读': '阅读', '读书': '阅读', '写作': '写作',
+    '社团': '社团活动', '志愿': '志愿服务', '公益': '公益',
+    '比赛': '竞赛', '奖': '获奖', '面试': '面试'
+  }
+  schedules.forEach(s => {
+    for (const [k, v] of Object.entries(keywordMap)) {
+      if (s.title.includes(k) && !skillTags.includes(v)) {
+        skillTags.push(v)
+        break
+      }
+    }
+  })
+  if (skillTags.length === 0) skillTags.push('日程管理')
+
+  // Activity highlights from completed schedules
+  const activityHighlights = schedules.slice(0, 5).map(s => ({
+    title: s.title,
+    date: s.date,
+    description: s.remark || `于 ${s.date} 完成${s.location ? '，地点：' + s.location : ''}`
+  }))
+
+  // Personal summary
+  const name = profile.nickname || '用户'
+  let personalSummary = profile.bio
+    ? `${name}，${profile.bio}`
+    : `${name}是一位正在有序成长的用户，通过合理安排日程，逐步实现自己的目标。`
+  if (profile.goals) {
+    personalSummary += ` 近期正在努力：${profile.goals}`
+  }
+
+  // Growth insight
+  const completedCount = schedules.length
+  const momentCount = moments.length
+  let growthInsight = ''
+  if (completedCount >= 10) {
+    growthInsight = `已完成 ${completedCount} 项日程，执行力令人印象深刻！持续的坚持正在塑造更好的自己。`
+  } else if (completedCount >= 5) {
+    growthInsight = `已完成 ${completedCount} 项日程，每天的行动积累正在让目标变得更近。继续保持！`
+  } else if (completedCount > 0) {
+    growthInsight = `已踏出第一步，完成了 ${completedCount} 项日程。每一步都算数，坚持下去会看到更大的改变。`
+  } else {
+    growthInsight = `还没有已完成的日程记录。不妨从现在开始，设定一个小目标并完成它～`
+  }
+
+  // Suggested next steps
+  const suggestedNextSteps = []
+  if (profile.goals) {
+    const goalList = profile.goals.split(/[,，、；;]/).filter(Boolean)
+    goalList.slice(0, 3).forEach(g => {
+      suggestedNextSteps.push(`朝着「${g.trim()}」的目标再迈一步`)
+    })
+  }
+  if (suggestedNextSteps.length === 0) {
+    suggestedNextSteps.push('设定一个本周的小目标，把它添加到日历中')
+    suggestedNextSteps.push('记录一次生活动态，分享你的小成就')
+  }
+  if (completedCount > 0 && suggestedNextSteps.length < 4) {
+    suggestedNextSteps.push('回顾已完成的事项，给自己一个小小的奖励')
+  }
+
+  return {
+    personalSummary,
+    skillTags: skillTags.slice(0, 8),
+    activityHighlights,
+    growthInsight,
+    suggestedNextSteps: suggestedNextSteps.slice(0, 4)
+  }
+}
 
 module.exports = router

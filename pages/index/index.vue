@@ -5,389 +5,61 @@
 
     <!-- 主内容区：通过 activeTab 决定显示哪个版块 -->
     <view class="main-content">
-      
-      <!-- ========================================================================== -->
-      <!-- 1. 版块：日历视图 -->
-      <!-- ========================================================================== -->
-      <scroll-view v-if="activeTab === 'calendar'" class="scroll-container" scroll-y>
-        <view class="calendar-view">
-          <!-- 顶部月份控制区 -->
-          <view class="header-control">
-            <view class="month-title">
-              <text class="icon-left" @click="goToPrevMonth"><</text>
-              <text class="title-text">{{ monthLabel }}</text>
-              <text class="icon-right" @click="goToNextMonth">></text>
-            </view>
-            <view class="view-switch">
-              <text class="switch-btn" :class="{'active-switch': activeView === 'week'}" @click="activeView = 'week'">周</text>
-              <text class="switch-btn" :class="{'active-switch': activeView === 'month'}" @click="activeView = 'month'">月</text>
-            </view>
-          </view>
+      <Transition name="tab" mode="out-in">
 
-          <!-- 日历月视图网格 -->
-          <view class="calendar-grid">
-            <view class="week-days">
-              <text class="day-label" v-for="d in days" :key="d">{{d}}</text>
-            </view>
-            <view class="dates-grid">
-              <template v-if="activeView === 'month'">
-                <view class="empty-cell" v-for="e in leadingEmptyCount" :key="'e'+e"></view>
-                <view
-                  class="date-cell"
-                  :class="{'is-today': getDateKeyForDay(date) === todayKey}"
-                  v-for="date in monthDates"
-                  :key="date"
-                  @click="selectDate(date); openAddModal(date)"
-                >
-                  <text class="date-num" :class="{'today-num': getDateKeyForDay(date) === todayKey}">{{date}}</text>
-                  <view class="tags-row">
-                    <view
-                      v-for="color in getTagsForDate(date).slice(0, 3)"
-                      :key="color"
-                      class="tag-line"
-                      :style="{ backgroundColor: color }"
-                    ></view>
-                  </view>
-                </view>
-              </template>
-              <template v-else-if="activeView === 'week'">
-                <view class="week-grid">
-                  <view class="date-cell" v-for="key in weekDatesKeys" :key="key" @click="selectDateByKey(key); openAddModal()">
-                    <text class="date-num" :class="{'today-num': key === todayKey}">{{ key.slice(8) }}</text>
-                    <view class="tags-row">
-                      <view
-                        v-for="color in scheduleTagsByDate[key] ? scheduleTagsByDate[key].slice(0,3) : []"
-                        :key="color"
-                        class="tag-line"
-                        :style="{ backgroundColor: color }"
-                      ></view>
-                    </view>
-                  </view>
-                </view>
-              </template>
-            </view>
-          </view>
+      <!-- 1. 日历视图 -->
+      <CalendarView
+        v-if="activeTab === 'calendar'"
+        :key="'calendar'"
+        :schedules="schedules"
+        :categories="categories"
+        :todayKey="todayKey"
+        @open-add-modal="openAddModal"
+        @open-edit-modal="openEditModal"
+        @open-ai-modal="openAIModal"
+        @toggle-task="toggleTask"
+        @remove-schedule="removeSchedule"
+      />
 
-          <view class="gray-divider"></view>
+      <!-- 2. 提醒中心视图 -->
+      <ReminderView
+        v-else-if="activeTab === 'reminders'"
+        :key="'reminders'"
+        :schedules="schedules"
+        :categories="categories"
+        :settings="settings"
+        :todayKey="todayKey"
+        @open-edit-modal="openEditModal"
+        @toggle-task="toggleTask"
+        @remove-schedule="removeSchedule"
+        @toggle-morning-push="toggleMorningPush"
+        @set-morning-push-time="setMorningPushTime"
+      />
 
-          <!-- 今日待办列表区域 -->
-          <view class="today-section">
-            <view class="section-header">
-              <text class="section-title">{{ todayLabel }} 今日待办</text>
-              <text class="section-sub">{{ todayTasksCount }}项任务</text>
-            </view>
-            
-            <view class="task-list">
-              <view class="task-item" v-for="task in todayTasks" :key="task.id">
-                <view class="task-check-box" @click="toggleTask(task)">
-                  <text v-if="task.completed" class="icon-checked">✓</text>
-                  <view v-else class="icon-unchecked"></view>
-                </view>
-                <view class="task-body" @click="openEditModal(task)">
-                  <text class="task-item-title" :class="{'line-through': task.completed}">{{ task.title }}</text>
-                  <view class="task-meta">
-                    <text class="task-time-tag">{{ task.time }}</text>
-                    <text class="category-badge" :style="{ color: task.color, backgroundColor: task.color + '20' }">{{ task.categoryName }}</text>
-                  </view>
-                </view>
-                <text class="menu-text text-red" @click="removeSchedule(task.id)">删除</text>
-                <view v-if="task.priority === 3" class="priority-line"></view>
-              </view>
-            </view>
-          </view>
-        </view>
+      <!-- 3. 生活动态视图 -->
+      <DynamicsView
+        v-else-if="activeTab === 'dynamics'"
+        :key="'dynamics'"
+        :moments="moments"
+        :schedules="schedules"
+        :userNickname="session.nickname"
+        :userAvatar="session.avatar"
+        @open-publish-modal="openPublishModal"
+      />
 
-        <!-- 日历页专属的双悬浮按钮组 -->
-        <view class="fab-group">
-          <view class="fab-ai" @click="openAIModal">✨</view>
-          <view class="fab-add" @click="openAddModal">+</view>
-        </view>
-      </scroll-view>
+      <!-- 4. 个人中心视图 -->
+      <ProfileView
+        v-else-if="activeTab === 'profile'"
+        :key="'profile'"
+        :session="session"
+        :schedules="schedules"
+        :momentsCount="moments.length"
+        @open-auth-modal="openAuthModal"
+        @open-profile-modal="openProfileModal"
+        @logout="handleLogout"
+      />
 
-      <!-- ========================================================================== -->
-      <!-- 2. 版块：提醒中心视图 (原 ReminderView.vue 整合) -->
-      <!-- ========================================================================== -->
-      <scroll-view v-else-if="activeTab === 'reminders'" class="scroll-container" scroll-y>
-        <view class="reminder-view">
-          <view class="page-header">
-            <text class="page-title">提醒中心</text>
-          </view>
-
-          <!-- 晨间推送设置横幅 -->
-          <view class="morning-banner">
-            <view class="banner-left">
-              <text class="icon-bell">🔔</text>
-              <text class="banner-text">
-                晨间推送:
-                <picker mode="time" :value="settings.morningPushTime" @change="setMorningPushTime">
-                  <text class="text-blue">每天 {{ settings.morningPushTime }}</text>
-                </picker>
-              </text>
-            </view>
-            <view class="switch-ui" :class="{'active-toggle': morningPushEnabled}" @click="toggleMorningPush">
-              <view class="switch-knob" :class="{'knob-off': !morningPushEnabled}"></view>
-            </view>
-          </view>
-
-          <!-- 时间轴容器 -->
-          <view class="timeline-container">
-            
-            <!-- 今日剩余待办 -->
-            <view class="timeline-section">
-              <view class="timeline-node node-blue"></view>
-              <text class="section-title">今日剩余</text>
-              <view class="task-list-timeline">
-                <view class="task-card" :class="{ 'card-completed': task.completed }" v-for="task in todayTasks" :key="task.id">
-                  <text class="task-time-left">{{ task.time }}</text>
-                  <view class="task-card-content">
-                    <view class="task-info" @click="openEditModal(task)">
-                      <text class="task-title" :class="{ 'text-red': task.priority === 3, 'line-through': task.completed }">{{ task.title }}</text>
-                      <view class="task-tag" :style="{ color: task.color, backgroundColor: task.color + '20' }">
-                        {{ task.categoryName }}
-                      </view>
-                    </view>
-                    <view class="task-actions">
-                      <view class="circle-check" @click.stop="toggleTask(task)"></view>
-                      <text class="action-btn" @click.stop="openEditModal(task)">编辑</text>
-                      <text class="action-btn text-red" @click.stop="removeSchedule(task.id)">删除</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-            </view>
-
-            <!-- 未来待办 -->
-            <view class="timeline-section">
-              <view class="timeline-node node-green"></view>
-              <text class="section-title">未来待办</text>
-              <view class="task-list-timeline">
-                <view class="task-card" v-for="task in futureTasks" :key="task.id">
-                  <text class="task-date-left">{{ task.date.slice(5) }}</text>
-                  <view class="task-card-content">
-                    <view class="task-info" @click="openEditModal(task)">
-                      <text class="task-title text-gray">{{ task.title }}</text>
-                      <text class="task-desc">{{ task.time }}</text>
-                    </view>
-                    <view class="task-actions">
-                      <text class="action-btn" @click.stop="openEditModal(task)">编辑</text>
-                      <text class="action-btn text-red" @click.stop="removeSchedule(task.id)">删除</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-            </view>
-
-            <!-- 已过期任务 (置灰) -->
-            <view class="timeline-section">
-              <view class="timeline-node node-gray"></view>
-              <text class="section-title text-light-gray">已过期任务</text>
-              <view class="task-list-timeline">
-                <view class="task-card card-expired" v-for="task in pastTasks" :key="task.id">
-                  <text class="task-date-left text-light-gray">{{ task.date.slice(5) }}</text>
-                  <view class="task-card-content">
-                    <view class="task-info" @click="openEditModal(task)">
-                      <text class="task-title line-through">{{ task.title }}</text>
-                    </view>
-                    <view class="task-actions">
-                      <text class="action-btn" @click.stop="openEditModal(task)">编辑</text>
-                      <text class="action-btn text-red" @click.stop="removeSchedule(task.id)">删除</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-            </view>
-
-          </view>
-        </view>
-      </scroll-view>
-
-      <!-- ========================================================================== -->
-      <!-- 3. 版块：生活动态视图 (仿微信朋友圈竖版左侧日期) -->
-      <!-- ========================================================================== -->
-      <view v-else-if="activeTab === 'dynamics'" class="full-component-container">
-        <view class="moments-view">
-          <!-- 顶部标题栏 -->
-          <view class="moments-top-bar">
-            <text class="moments-title">生活动态</text>
-          </view>
-
-          <!-- 动态时间线列表 -->
-          <scroll-view class="moments-scroll" scroll-y>
-            <view class="moments-list">
-
-              <view class="moment-card" v-for="dyn in moments" :key="dyn.id">
-                <!-- 左侧日期栏 -->
-                <view class="moment-date-col">
-                  <text class="moment-date-day">{{ dyn.date.slice(5) }}</text>
-                  <text class="moment-date-weekday">{{ weekdayLabel(dyn.date) }}</text>
-                </view>
-
-                <!-- 右侧内容区 -->
-                <view class="moment-main">
-                  <!-- 头部：头像 + 昵称 + 时间 -->
-                  <view class="moment-header">
-                    <view class="moment-avatar">
-                      <text class="moment-avatar-text">👤</text>
-                    </view>
-                    <view class="moment-header-info">
-                      <text class="moment-nickname">{{ session.email ? session.email.split('@')[0] : '我' }}</text>
-                      <text class="moment-time">{{ relativeTime(dyn.date, dyn.time) }}</text>
-                    </view>
-                  </view>
-
-                  <!-- 正文内容 -->
-                  <view class="moment-body">
-                    <text
-                      class="moment-content"
-                      :class="{ 'moment-content-folded': dyn.content && dyn.content.length > 140 && !expandedMoments[dyn.id] }"
-                    >{{ dyn.content }}</text>
-                    <text
-                      v-if="dyn.content && dyn.content.length > 140"
-                      class="moment-expand-btn"
-                      @click="toggleExpand(dyn.id)"
-                    >{{ expandedMoments[dyn.id] ? '收起' : '全文' }}</text>
-                  </view>
-
-                  <!-- 图片九宫格 -->
-                  <view v-if="dyn.imageUrls && dyn.imageUrls.length" :class="['moment-images-grid', 'grid-col-' + Math.min(dyn.imageUrls.length > 1 ? (dyn.imageUrls.length === 4 ? 2 : 3) : 1, 3)]">
-                    <view
-                      class="moment-image-wrap"
-                      :class="{ 'moment-image-single': dyn.imageUrls.length === 1 }"
-                      v-for="(img, idx) in dyn.imageUrls.slice(0,9)"
-                      :key="idx"
-                      @click="previewImages(dyn.imageUrls, img)"
-                    >
-                      <image :src="img" mode="aspectFill" class="moment-image" />
-                    </view>
-                  </view>
-
-                  <!-- 关联日程 -->
-                  <view v-if="dyn.relatedScheduleId" class="moment-schedule-link">
-                    <text class="moment-link-icon">📎</text>
-                    <text class="moment-link-text">{{ scheduleTitleById[dyn.relatedScheduleId] || '已删除日程' }}</text>
-                  </view>
-
-                  <!-- 底部操作栏 -->
-                  <view class="moment-actions">
-                    <view class="moment-action-item">
-                      <text class="moment-action-text">赞</text>
-                    </view>
-                    <view class="moment-action-item">
-                      <text class="moment-action-text">评论</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-
-              <!-- 空状态 -->
-              <view v-if="moments.length === 0" class="moments-empty">
-                <text class="empty-icon">📝</text>
-                <text class="empty-text">还没有动态，记录点什么吧</text>
-              </view>
-            </view>
-          </scroll-view>
-
-          <!-- 发布悬浮按钮 -->
-          <view class="moments-fab" @click="openPublishModal">
-            <text class="moments-fab-icon">📷</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- ========================================================================== -->
-      <!-- 4. 版块：个人中心视图 (原 ProfileView.vue 整合) -->
-      <!-- ========================================================================== -->
-      <scroll-view v-else-if="activeTab === 'profile'" class="scroll-container" scroll-y>
-        <view class="profile-view">
-          <!-- 顶部用户信息 (带底部弧度) -->
-          <view class="profile-header">
-            <view class="user-info">
-              <view class="avatar-box">
-                <text class="avatar-icon">👤</text>
-              </view>
-              <view class="text-info">
-                  <text class="user-name">{{ session.email || '游客' }}</text>
-                  <text class="user-sub">{{ session.isGuest ? '请登录以同步数据' : '欢迎回来' }}</text>
-              </view>
-            </view>
-          </view>
-
-          <view class="profile-content">
-            <!-- 数据面板 -->
-            <view class="stats-panel">
-              <view class="stat-item">
-                <text class="stat-num">{{ completedTasksCount }}</text>
-                <text class="stat-label">完成日程</text>
-              </view>
-              <view class="stat-divider"></view>
-              <view class="stat-item">
-                <text class="stat-num">{{ moments.length }}</text>
-                <text class="stat-label">发布动态</text>
-              </view>
-            </view>
-
-            <!-- 菜单列表组 1 -->
-            <view class="menu-group">
-              <view class="menu-row">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #FFA500;">📁</text>
-                  <text class="menu-text">分类管理</text>
-                </view>
-                <text class="icon-right">></text>
-              </view>
-              <view class="menu-row">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #3B82F6;">🔔</text>
-                  <text class="menu-text">提醒与推送设置</text>
-                </view>
-                <text class="icon-right">></text>
-              </view>
-              <view class="menu-row">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #50C878;">🔄</text>
-                  <text class="menu-text">数据同步</text>
-                </view>
-                <view class="menu-right">
-                  <text class="menu-value">自动</text>
-                  <text class="icon-right">></text>
-                </view>
-              </view>
-              <view class="menu-row no-border">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #9ca3af;">⚙️</text>
-                  <text class="menu-text">通用设置</text>
-                </view>
-                <text class="icon-right">></text>
-              </view>
-            </view>
-
-            <!-- 菜单列表组 2 -->
-            <view class="menu-group">
-              <view class="menu-row" v-if="session.isGuest">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #3B82F6;">🔑</text>
-                  <text class="menu-text">登录/注册</text>
-                </view>
-                <text class="icon-right" @click="openAuthModal('login')">></text>
-              </view>
-              <view class="menu-row">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #9ca3af;">ℹ️</text>
-                  <text class="menu-text">关于有序日常</text>
-                </view>
-                <text class="icon-right">></text>
-              </view>
-              <view class="menu-row no-border" v-if="!session.isGuest" @click="handleLogout">
-                <view class="menu-left">
-                  <text class="menu-icon" style="color: #ef4444;">🚪</text>
-                  <text class="menu-text text-red">退出登录</text>
-                </view>
-              </view>
-            </view>
-          </view>
-        </view>
-      </scroll-view>
-      
+      </Transition>
     </view>
 
     <!-- ========================================================================== -->
@@ -415,75 +87,111 @@
     <!-- ========================================================================== -->
     <!-- 模态弹窗组 -->
     <!-- ========================================================================== -->
-    
+
     <!-- A. 全局 AI 智能日程对话弹窗 -->
+    <Transition name="modal">
     <view v-if="showAIModal" class="modal-mask" @click="showAIModal = false">
-      <view class="modal-content ai-modal" @click.stop>
-        <view class="modal-header">
-          <text class="ai-title">✨ AI 智能日程助手</text>
+      <Transition name="slide-up">
+      <view class="modal-content ai-chat-modal" @click.stop>
+        <view class="ai-chat-header">
+          <text class="ai-chat-title">✨ 小日 · 日程助手</text>
           <text class="close-btn" @click="showAIModal = false">×</text>
         </view>
-        
-        <view v-if="!aiCandidates.length" class="ai-input-workflow">
-          <text class="ai-tips">输入口语化生活安排，智能助手将为您自动生成标准的结构化日历提醒：</text>
-          <view class="ai-input-area">
-            <textarea v-model="aiText" placeholder="例如：明天下午3点去图书馆写网络大作业..." class="ai-textarea"></textarea>
-            <view class="ai-actions">
-              <view class="mic-btn" @click="simulateVoiceInput">🎤</view>
-              <view class="send-btn" :class="{'send-active': aiText.length > 0}" @click="generateSchedule">↑</view>
-            </view>
-          </view>
-        </view>
 
-        <!-- AI 生成后的候选列表与编辑 -->
-        <view v-else class="ai-result-workflow">
-          <view class="ai-candidates-list">
-            <view
-              class="ai-candidate"
-              v-for="(c, idx) in aiCandidates"
-              :key="idx"
-              :class="{ 'candidate-selected': aiSelectedIndex === idx }"
-              @click="aiSelectedIndex = idx"
-            >
-              <text class="result-card-title">{{ c.title }}</text>
-              <text class="result-line">📅 {{ c.date || c.time || '' }}</text>
-            </view>
-          </view>
-
-          <view v-if="aiCandidates.length" class="ai-result-edit">
-            <view class="ai-result-card">
-              <input type="text" v-model="aiCandidates[aiSelectedIndex].title" class="input-title" />
-              <view class="result-card-body">
-                <picker mode="date" :value="aiCandidates[aiSelectedIndex].date || new Date().toISOString().slice(0,10)" @change="(e) => aiCandidates[aiSelectedIndex].date = e.detail.value">
-                  <text class="result-line">📅 时间：{{ aiCandidates[aiSelectedIndex].date || '选择日期' }}</text>
-                </picker>
-                <picker mode="time" :value="aiCandidates[aiSelectedIndex].time || '09:00'" @change="(e) => aiCandidates[aiSelectedIndex].time = e.detail.value">
-                  <text class="result-line">⏰ 时刻：{{ aiCandidates[aiSelectedIndex].time || '选择时间' }}</text>
-                </picker>
-                <view class="form-row">
-                  <text class="row-icon">⭐</text>
-                  <view class="category-options">
-                    <text class="opt-badge" :class="{'opt-active': aiCandidates[aiSelectedIndex].priority === 1}" @click="aiCandidates[aiSelectedIndex].priority = 1">低</text>
-                    <text class="opt-badge" :class="{'opt-active': aiCandidates[aiSelectedIndex].priority === 2}" @click="aiCandidates[aiSelectedIndex].priority = 2">中</text>
-                    <text class="opt-badge" :class="{'opt-active': aiCandidates[aiSelectedIndex].priority === 3}" @click="aiCandidates[aiSelectedIndex].priority = 3">高</text>
+        <!-- 对话消息列表 -->
+        <scroll-view class="ai-chat-body" scroll-y :scroll-into-view="'ai-msg-' + (aiMessages.length - 1)">
+          <view v-for="(msg, idx) in aiMessages" :key="idx" :id="'ai-msg-' + idx" class="ai-msg-wrapper">
+            <!-- AI 消息 -->
+            <view v-if="msg.role === 'assistant'" class="ai-msg ai-msg-assistant">
+              <view class="ai-msg-avatar">🤖</view>
+              <view class="ai-msg-bubble">
+                <text class="ai-msg-text">{{ msg.content }}</text>
+                <!-- 日程提案卡片 -->
+                <view v-if="msg.proposal" class="ai-proposal-card">
+                  <view class="proposal-header">📋 日程提案</view>
+                  <view class="proposal-field">
+                    <text class="proposal-label">标题</text>
+                    <input v-model="msg.proposal.title" class="proposal-input" />
+                  </view>
+                  <view class="proposal-row">
+                    <view class="proposal-field flex-1">
+                      <text class="proposal-label">日期</text>
+                      <picker mode="date" :value="msg.proposal.date" @change="(e) => msg.proposal.date = e.detail.value">
+                        <text class="proposal-value">{{ msg.proposal.date }}</text>
+                      </picker>
+                    </view>
+                    <view class="proposal-field flex-1">
+                      <text class="proposal-label">时间</text>
+                      <picker mode="time" :value="msg.proposal.time" @change="(e) => msg.proposal.time = e.detail.value">
+                        <text class="proposal-value">{{ msg.proposal.time }}</text>
+                      </picker>
+                    </view>
+                  </view>
+                  <view class="proposal-field">
+                    <text class="proposal-label">地点</text>
+                    <input v-model="msg.proposal.location" class="proposal-input" placeholder="选填" />
+                  </view>
+                  <view class="proposal-row">
+                    <view class="proposal-field flex-1">
+                      <text class="proposal-label">优先级</text>
+                      <view class="priority-options">
+                        <text class="p-opt" :class="{'p-active': msg.proposal.priority === 1}" @click="msg.proposal.priority = 1">低</text>
+                        <text class="p-opt" :class="{'p-active': msg.proposal.priority === 2}" @click="msg.proposal.priority = 2">中</text>
+                        <text class="p-opt" :class="{'p-active': msg.proposal.priority === 3}" @click="msg.proposal.priority = 3">高</text>
+                      </view>
+                    </view>
+                  </view>
+                  <view style="display:flex; gap:8px; margin-top:10px;">
+                    <button class="proposal-btn proposal-btn-add" @click="acceptProposal(idx)">✓ 添加到日历</button>
+                    <button class="proposal-btn proposal-btn-ignore" @click="dismissProposal(idx)">忽略</button>
                   </view>
                 </view>
               </view>
             </view>
-            <view class="modal-btn-group">
-              <button class="btn-secondary" @click="aiCandidates = []; aiText = ''; showAIModal = false">关闭</button>
-              <button class="btn-primary" @click="confirmAISchedule">添加到日历</button>
+            <!-- 用户消息 -->
+            <view v-else class="ai-msg ai-msg-user">
+              <view class="ai-msg-bubble user-bubble">
+                <text class="ai-msg-text user-text">{{ msg.content }}</text>
+              </view>
             </view>
           </view>
-          <view v-else class="ai-result-workflow">
-            <text>没有生成候选，请重试或修改描述。</text>
+
+          <!-- 输入中提示 -->
+          <view v-if="aiLoading" class="ai-msg ai-msg-assistant">
+            <view class="ai-msg-avatar">🤖</view>
+            <view class="ai-msg-bubble ai-typing">
+              <text class="ai-dot">●</text><text class="ai-dot">●</text><text class="ai-dot">●</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <!-- 底部输入区 -->
+        <view class="ai-chat-footer">
+          <view class="ai-chat-input-row">
+            <view class="ai-chat-mic" :class="{'mic-recording': isRecording}" @click="simulateVoiceInput">
+              <text>{{ isRecording ? '🔴' : '🎤' }}</text>
+            </view>
+            <input
+              v-model="aiInput"
+              class="ai-chat-input"
+              placeholder="说说你的日程安排..."
+              :disabled="aiLoading"
+              @confirm="sendAiMessage"
+            />
+            <view class="ai-chat-send" :class="{'send-active': aiInput.trim() && !aiLoading}" @click="sendAiMessage">
+              <text>↑</text>
+            </view>
           </view>
         </view>
       </view>
+      </Transition>
     </view>
+    </Transition>
 
     <!-- B. 全局常规新建日程弹窗 -->
+    <Transition name="modal">
     <view v-if="showAddModal" class="modal-mask" @click="showAddModal = false">
+      <Transition name="slide-up">
       <view class="modal-content add-modal" @click.stop>
         <view class="add-header">
           <text class="btn-cancel" @click="showAddModal = false">取消</text>
@@ -537,10 +245,14 @@
           </view>
         </view>
       </view>
+      </Transition>
     </view>
+    </Transition>
 
     <!-- C. 发布生活动态弹窗 -->
+    <Transition name="modal">
     <view v-if="showPublishModal" class="modal-mask" @click="showPublishModal = false">
+      <Transition name="slide-up">
       <view class="modal-content add-modal" @click.stop>
         <view class="add-header">
           <text class="btn-cancel" @click="showPublishModal = false">取消</text>
@@ -548,20 +260,42 @@
           <text class="btn-save" @click="saveNewDynamic">发布</text>
         </view>
         <view class="add-form">
-          <textarea placeholder="记录今天的生活碎片吧..." class="form-textarea" v-model="newDynamicText" style="height: 180px;"></textarea>
-          
+          <textarea placeholder="记录今天的生活碎片吧..." class="form-textarea" v-model="newDynamicText" style="height: 160px;"></textarea>
+
+          <!-- 日期选择 -->
+          <view class="form-row">
+            <text class="row-icon">📅</text>
+            <picker mode="date" :value="newDynamicDate" @change="newDynamicDate = $event.detail.value">
+              <text class="row-text">{{ newDynamicDateLabel }}</text>
+            </picker>
+          </view>
+
+          <!-- 图片选择区 -->
+          <view class="image-picker-area">
+            <view class="image-preview-grid">
+              <view class="image-preview-item" v-for="(img, idx) in newDynamicImages" :key="idx">
+                <image :src="img" mode="aspectFill" class="preview-img" @error="(e) => { e.target.style.display = 'none'; }" />
+                <view class="img-remove-btn" @click="removeDynamicImage(idx)">×</view>
+              </view>
+              <view v-if="newDynamicImages.length < 9" class="image-add-btn" @click="chooseDynamicImages">
+                <text class="add-icon">📷</text>
+                <text class="add-text">{{ newDynamicImages.length }}/9</text>
+              </view>
+            </view>
+          </view>
+
           <!-- 日程挂载选项 -->
           <view class="form-row">
             <text class="row-icon">📎</text>
             <view class="schedule-selector" @click="toggleSelectRelation">
-              <text class="row-text" v-if="!relatedScheduleSelected">关联今日日程</text>
+              <text class="row-text" v-if="!relatedScheduleSelected">关联{{ newDynamicDate === todayKey ? '今日' : '当天' }}日程</text>
               <text class="row-text text-blue" v-else>已关联: {{ scheduleTitleById[relatedScheduleSelected] || '已删除日程' }}</text>
             </view>
           </view>
-          <view class="schedule-list" v-if="todayTasks.length">
+          <view class="schedule-list" v-if="publishDateTasks.length">
             <view
               class="schedule-item"
-              v-for="task in todayTasks"
+              v-for="task in publishDateTasks"
               :key="task.id"
               :class="{'schedule-item-active': relatedScheduleSelected === task.id}"
               @click="relatedScheduleSelected = relatedScheduleSelected === task.id ? '' : task.id"
@@ -570,12 +304,19 @@
               <text class="schedule-item-time">{{ task.time }}</text>
             </view>
           </view>
+          <view v-else-if="newDynamicDate" style="padding:8px 0;">
+            <text style="font-size:12px; color:#9ca3af;">{{ newDynamicDate === todayKey ? '今' : '当' }}天暂无日程</text>
+          </view>
         </view>
       </view>
+    </Transition>
     </view>
+    </Transition>
 
     <!-- D. 登录/注册弹窗 -->
+    <Transition name="modal">
     <view v-if="showAuthModal" class="modal-mask" @click="showAuthModal = false">
+      <Transition name="slide-up">
       <view class="modal-content add-modal" @click.stop>
         <view class="add-header">
           <text class="btn-cancel" @click="showAuthModal = false">取消</text>
@@ -583,22 +324,83 @@
           <text class="btn-save" @click="submitAuth">{{ authLoading ? '处理中...' : '提交' }}</text>
         </view>
         <view class="add-form">
-          <view style="padding: 12px 0;">
-            <text>使用微信一键登录以同步数据到云端，首次登录会自动创建账户。</text>
-          </view>
-          <view style="margin-top: 12px; display:flex; justify-content:center;">
-            <button class="wechat-login-btn" @click="submitAuth">{{ authLoading ? '登录中...' : '使用微信登录' }}</button>
+          <view class="auth-form">
+            <input type="text" v-model="authEmail" placeholder="请输入邮箱" class="input-title" style="font-size:16px; height:44px;" />
+            <input type="password" v-model="authPassword" placeholder="请输入密码（至少6位）" class="input-title" style="font-size:16px; height:44px; margin-top:12px;" />
+            <input v-if="authMode === 'register'" type="text" v-model="authNickname" placeholder="昵称（选填，默认为邮箱前缀）" class="input-title" style="font-size:16px; height:44px; margin-top:12px;" />
+            <template v-if="authMode === 'register'">
+              <textarea v-model="authBio" placeholder="个人简介（选填，如：一名热爱生活的大学生）" style="width:100%;height:60px;margin-top:12px;background:var(--color-bg-input);border-radius:var(--radius-md);padding:10px;font-size:14px;box-sizing:border-box;" />
+              <textarea v-model="authGoals" placeholder="近期目标（选填，如：通过英语六级, 完成毕业设计）" style="width:100%;height:60px;margin-top:8px;background:var(--color-bg-input);border-radius:var(--radius-md);padding:10px;font-size:14px;box-sizing:border-box;" />
+              <input type="text" v-model="authSkills" placeholder="技能标签（选填，如：Python, 摄影, 日语）" class="input-title" style="font-size:14px; height:40px; margin-top:8px;" />
+              <input type="text" v-model="authInterests" placeholder="兴趣爱好（选填，如：跑步, 阅读, 音乐）" class="input-title" style="font-size:14px; height:40px; margin-top:8px;" />
+            </template>
+            <view style="margin-top:20px;">
+              <button class="btn-primary" style="width:100%;" @click="submitAuth">{{ authLoading ? '处理中...' : (authMode === 'register' ? '注册' : '登录') }}</button>
+            </view>
+            <view style="margin-top:16px; text-align:center;">
+              <text style="color:#3B82F6; font-size:14px;" @click="authMode = authMode === 'login' ? 'register' : 'login'">
+                {{ authMode === 'login' ? '没有账号？去注册' : '已有账号？去登录' }}
+              </text>
+            </view>
           </view>
         </view>
       </view>
+    </Transition>
     </view>
+    </Transition>
+
+    <!-- E. 编辑个人资料弹窗 -->
+    <Transition name="modal">
+    <view v-if="showProfileModal" class="modal-mask" @click="showProfileModal = false">
+      <Transition name="slide-up">
+      <view class="modal-content add-modal" @click.stop>
+        <view class="add-header">
+          <text class="btn-cancel" @click="showProfileModal = false">取消</text>
+          <text class="add-modal-title">编辑个人资料</text>
+          <text class="btn-save" @click="saveProfile">{{ profileLoading ? '保存中...' : '保存' }}</text>
+        </view>
+        <view class="add-form" style="align-items:center;">
+          <!-- 头像编辑 -->
+          <view class="profile-avatar-edit" @click="chooseAvatar">
+            <image v-if="editAvatar" :src="editAvatar" mode="aspectFill" class="profile-avatar-img" @error="(e) => { e.target.style.display = 'none'; }" />
+            <text v-else class="profile-avatar-placeholder">{{ editNickname ? editNickname.charAt(0) : '👤' }}</text>
+            <view class="profile-avatar-overlay">
+              <text>更换头像</text>
+            </view>
+          </view>
+          <!-- 昵称编辑 -->
+          <view style="width:100%; margin-top:20px;">
+            <text style="font-size:13px; color:#64748b;">昵称</text>
+            <input type="text" v-model="editNickname" placeholder="请输入昵称" class="input-title" style="font-size:16px; height:44px; margin-top:6px;" />
+          </view>
+          <view style="width:100%; margin-top:16px;">
+            <text style="font-size:13px; color:#64748b;">个人简介</text>
+            <textarea v-model="editBio" placeholder="介绍一下自己吧" style="width:100%;height:60px;margin-top:6px;background:var(--color-bg-input);border-radius:var(--radius-md);padding:10px;font-size:14px;box-sizing:border-box;" />
+          </view>
+          <view style="width:100%; margin-top:16px;">
+            <text style="font-size:13px; color:#64748b;">近期目标</text>
+            <textarea v-model="editGoals" placeholder="如：通过英语六级, 完成毕业设计" style="width:100%;height:60px;margin-top:6px;background:var(--color-bg-input);border-radius:var(--radius-md);padding:10px;font-size:14px;box-sizing:border-box;" />
+          </view>
+          <view style="width:100%; margin-top:16px;">
+            <text style="font-size:13px; color:#64748b;">技能标签</text>
+            <input type="text" v-model="editSkills" placeholder="如：Python, 摄影, 日语" class="input-title" style="font-size:14px; height:40px; margin-top:6px;" />
+          </view>
+          <view style="width:100%; margin-top:16px;">
+            <text style="font-size:13px; color:#64748b;">兴趣爱好</text>
+            <input type="text" v-model="editInterests" placeholder="如：跑步, 阅读, 音乐" class="input-title" style="font-size:14px; height:40px; margin-top:6px;" />
+          </view>
+        </view>
+      </view>
+      </Transition>
+    </view>
+    </Transition>
 
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { toDateKey, toMonthLabel, addDays } from '../../services/date'
+import { toDateKey, addDays } from '../../services/date'
 import {
   getState,
   addSchedule,
@@ -606,14 +408,16 @@ import {
   deleteSchedule as deleteScheduleLocal,
   toggleScheduleCompleted,
   addMoment as addMomentLocal,
-  updateMoment as updateMomentLocal,
-  deleteMoment as deleteMomentLocal,
   updateSettings,
   updateState,
   setSession as setSessionLocal,
   clearSession
 } from '../../services/storage'
 import * as api from '../../services/api'
+import CalendarView from '../../components/views/CalendarView.vue'
+import ReminderView from '../../components/views/ReminderView.vue'
+import DynamicsView from '../../components/views/DynamicsView.vue'
+import ProfileView from '../../components/views/ProfileView.vue'
 
 const appState = ref(getState())
 
@@ -621,15 +425,49 @@ const refreshState = () => {
   appState.value = getState()
 }
 
+const session = computed(() => appState.value.session)
+const categories = computed(() => appState.value.categories)
+const schedules = computed(() => appState.value.schedules)
+const moments = computed(() => {
+  const arr = [...appState.value.moments]
+  arr.sort((a, b) => {
+    const da = `${a.date}T${a.time || '00:00'}`
+    const db = `${b.date}T${b.time || '00:00'}`
+    return db.localeCompare(da) // 降序：最新在前
+  })
+  return arr
+})
+const settings = computed(() => appState.value.settings)
+
+const todayKey = toDateKey(new Date())
+
+const isLoggedIn = () => !session.value.isGuest && session.value.token
+
 const loadServerData = async () => {
   if (session.value.isGuest || !session.value.token) return
   try {
+    // Sync profile
+    api.fetchProfile().then(profile => {
+      if (profile) {
+        updateState(state => {
+          state.session.nickname = profile.nickname || state.session.nickname || ''
+          state.session.avatar = profile.avatar || state.session.avatar || ''
+          state.session.bio = profile.bio || state.session.bio || ''
+          state.session.goals = profile.goals || state.session.goals || ''
+          state.session.skills = profile.skills || state.session.skills || ''
+          state.session.interests = profile.interests || state.session.interests || ''
+          return state
+        })
+        refreshState()
+      }
+    }).catch(() => {})
+
     const [serverSchedules, serverMoments] = await Promise.all([
       api.fetchSchedules(),
       api.fetchMoments()
     ])
     if (serverSchedules && serverSchedules.length) {
-      const merged = serverSchedules.map(s => ({
+      const serverMapped = serverSchedules.map(s => ({
         id: String(s.id),
         title: s.title,
         date: s.date,
@@ -641,10 +479,19 @@ const loadServerData = async () => {
         completed: Boolean(s.completed),
         remindAt: s.remindAt || null
       }))
-      updateState(state => { state.schedules = merged; return state })
+      updateState(state => {
+        const serverIds = new Set(serverMapped.map(s => s.id))
+        const localOnly = state.schedules.filter(s => !serverIds.has(s.id))
+        state.schedules = [...serverMapped, ...localOnly].sort((a, b) => {
+          const da = `${a.date}T${a.time || '00:00'}`
+          const db = `${b.date}T${b.time || '00:00'}`
+          return db.localeCompare(da)
+        })
+        return state
+      })
     }
     if (serverMoments && serverMoments.length) {
-      const merged = serverMoments.map(m => ({
+      const serverMapped = serverMoments.map(m => ({
         id: String(m.id),
         content: m.content,
         date: m.date,
@@ -652,7 +499,16 @@ const loadServerData = async () => {
         relatedScheduleId: m.relatedScheduleId ? String(m.relatedScheduleId) : null,
         imageUrls: m.imageUrls || []
       }))
-      updateState(state => { state.moments = merged; return state })
+      updateState(state => {
+        const serverIds = new Set(serverMapped.map(m => m.id))
+        const localOnly = state.moments.filter(m => !serverIds.has(m.id))
+        state.moments = [...serverMapped, ...localOnly].sort((a, b) => {
+          const da = `${a.date}T${a.time || '00:00'}`
+          const db = `${b.date}T${b.time || '00:00'}`
+          return db.localeCompare(da)
+        })
+        return state
+      })
     }
     refreshState()
   } catch (e) {
@@ -660,60 +516,26 @@ const loadServerData = async () => {
   }
 }
 
-const isLoggedIn = () => !session.value.isGuest && session.value.token
-
-const relativeTime = (dateStr, timeStr) => {
-  const target = new Date(`${dateStr}T${timeStr}`)
-  const now = new Date()
-  const diff = now - target
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  if (dateStr === `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`) return '昨天'
-  if (hours < 48) return '昨天'
-  return `${dateStr.slice(5)} ${timeStr.slice(0,5)}`
-}
-
-const expandedMoments = ref({})
-const toggleExpand = (id) => {
-  expandedMoments.value[id] = !expandedMoments.value[id]
-}
-
-const previewImages = (urls, current) => {
-  uni.previewImage({ urls, current })
-}
-
-const weekDayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-const weekdayLabel = (dateStr) => {
-  const d = new Date(dateStr)
-  return weekDayNames[d.getDay()]
-}
-
+// Tab 切换
 const activeTab = ref('calendar')
-const activeView = ref('month')
 
+// 弹窗状态
 const showAIModal = ref(false)
 const showAddModal = ref(false)
 const showPublishModal = ref(false)
-
-const aiText = ref('')
-const aiCandidates = ref([])
-const aiSelectedIndex = ref(0)
-
-const editingScheduleId = ref(null)
-
 const showAuthModal = ref(false)
-const authMode = ref('login')
-const authEmail = ref('')
-const authPassword = ref('')
-const authLoading = ref(false)
+const showProfileModal = ref(false)
 
+// AI 对话状态
+const aiMessages = ref([])
+const aiInput = ref('')
+const aiLoading = ref(false)
+const isRecording = ref(false)
+
+// 日程表单状态
+const editingScheduleId = ref(null)
 const newScheduleTitle = ref('')
-const newScheduleDate = ref(toDateKey(new Date()))
+const newScheduleDate = ref(todayKey)
 const newScheduleTime = ref('09:00')
 const newScheduleCategoryId = ref(null)
 const newSchedulePriority = ref(1)
@@ -721,110 +543,47 @@ const newScheduleRemark = ref('')
 const newScheduleLocation = ref('')
 const newScheduleRemindTime = ref('')
 
+// 动态表单状态
 const newDynamicText = ref('')
+const newDynamicImages = ref([])
+const newDynamicDate = ref(todayKey)
 const relatedScheduleSelected = ref('')
 
-const days = ['日', '一', '二', '三', '四', '五', '六']
+// 登录状态
+const authMode = ref('login')
+const authLoading = ref(false)
+const authEmail = ref('')
+const authPassword = ref('')
+const authNickname = ref('')
+const authBio = ref('')
+const authGoals = ref('')
+const authSkills = ref('')
+const authInterests = ref('')
 
-const currentMonth = ref(new Date())
-const selectedDate = ref(toDateKey(new Date()))
-const todayKey = toDateKey(new Date())
-const todayLabel = computed(() => `${todayKey.slice(5, 7)}月${todayKey.slice(8)}日`)
+// 个人资料编辑状态
+const editNickname = ref('')
+const editAvatar = ref('')
+const editBio = ref('')
+const editGoals = ref('')
+const editSkills = ref('')
+const editInterests = ref('')
+const profileLoading = ref(false)
 
-const categories = computed(() => appState.value.categories)
-const schedules = computed(() => appState.value.schedules)
-const moments = computed(() => appState.value.moments)
-const settings = computed(() => appState.value.settings)
-const session = computed(() => appState.value.session)
-const morningPushEnabled = computed(() => settings.value.morningPushEnabled)
+const isEditingSchedule = computed(() => Boolean(editingScheduleId.value))
 
-const categoryById = computed(() => {
-  const map = {}
-  categories.value.forEach((category) => {
-    map[category.id] = category
-  })
-  return map
-})
+const todayTasks = computed(() =>
+  schedules.value.filter((t) => t.date === todayKey)
+)
 
-const monthLabel = computed(() => toMonthLabel(currentMonth.value))
-const leadingEmptyCount = computed(() => {
-  const firstDay = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth(), 1)
-  return firstDay.getDay()
-})
-const monthDateCount = computed(() => {
-  return new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + 1, 0).getDate()
-})
-const monthDates = computed(() => Array.from({ length: monthDateCount.value }, (_, i) => i + 1))
+const publishDateTasks = computed(() =>
+  schedules.value.filter((t) => t.date === newDynamicDate.value)
+)
 
-const getDateKeyForDay = (day) => {
-  const date = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth(), day)
-  return toDateKey(date)
-}
-
-// 计算选中日期所在周的日期键（从周日开始，7 天）
-const weekDatesKeys = computed(() => {
-  try {
-    const parts = selectedDate.value.split('-')
-    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-    const start = new Date(d)
-    start.setDate(d.getDate() - d.getDay())
-    const arr = []
-    for (let i = 0; i < 7; i += 1) {
-      const dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
-      arr.push(toDateKey(dt))
-    }
-    return arr
-  } catch (e) {
-    return [selectedDate.value]
-  }
-})
-
-const selectDateByKey = (dateKey) => {
-  selectedDate.value = dateKey
-  const parts = dateKey.split('-')
-  currentMonth.value = new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
-}
-
-const scheduleTagsByDate = computed(() => {
-  const map = {}
-  schedules.value.forEach((schedule) => {
-    const color = categoryById.value[schedule.categoryId]?.color || '#94a3b8'
-    if (!map[schedule.date]) {
-      map[schedule.date] = []
-    }
-    if (!map[schedule.date].includes(color)) {
-      map[schedule.date].push(color)
-    }
-  })
-  return map
-})
-
-const getTagsForDate = (day) => scheduleTagsByDate.value[getDateKeyForDay(day)] || []
-
-const scheduleToTask = (schedule) => {
-  const category = categoryById.value[schedule.categoryId] || { name: '未分类', color: '#94a3b8' }
-  return {
-    ...schedule,
-    categoryName: category.name,
-    color: category.color
-  }
-}
-
-const todayTasks = computed(() => schedules.value.filter((t) => t.date === todayKey).map(scheduleToTask))
-const todayTasksCount = computed(() => todayTasks.value.length)
-const todayRemainingTasks = computed(() => todayTasks.value.filter((t) => !t.completed))
-const futureTasks = computed(() => schedules.value.filter((t) => t.date > todayKey).map(scheduleToTask))
-const pastTasks = computed(() => schedules.value.filter((t) => t.date < todayKey).map(scheduleToTask))
-const completedTasksCount = computed(() => schedules.value.filter((t) => t.completed).length)
-
-const activeDate = ref(todayKey)
-const dynamicsDates = computed(() => {
-  const list = []
-  for (let offset = 0; offset < 7; offset += 1) {
-    const dateKey = toDateKey(addDays(new Date(), -offset))
-    list.push({ dateKey, label: dateKey.slice(5), isToday: dateKey === todayKey })
-  }
-  return list
+const newDynamicDateLabel = computed(() => {
+  if (newDynamicDate.value === todayKey) return `今天 (${newDynamicDate.value})`
+  const d = new Date(newDynamicDate.value)
+  const weekDayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return `${newDynamicDate.value} ${weekDayNames[d.getDay()]}`
 })
 
 const scheduleTitleById = computed(() => {
@@ -835,10 +594,7 @@ const scheduleTitleById = computed(() => {
   return map
 })
 
-const filteredDynamics = computed(() => moments.value.filter((m) => m.date === activeDate.value))
-
-const isEditingSchedule = computed(() => Boolean(editingScheduleId.value))
-
+// 弹窗控制方法
 const resetScheduleForm = (dateKey = todayKey) => {
   newScheduleTitle.value = ''
   newScheduleDate.value = dateKey
@@ -851,16 +607,16 @@ const resetScheduleForm = (dateKey = todayKey) => {
 }
 
 const openAIModal = () => {
-  aiCandidates.value = []
-  aiSelectedIndex.value = 0
-  aiText.value = ''
+  aiMessages.value = []
+  aiInput.value = ''
   showAIModal.value = true
+  // AI initiates the conversation
+  sendAiMessage(true)
 }
 
-const openAddModal = (day) => {
+const openAddModal = (dateKey) => {
   editingScheduleId.value = null
-  const dateKey = day ? getDateKeyForDay(day) : selectedDate.value
-  resetScheduleForm(dateKey)
+  resetScheduleForm(dateKey || todayKey)
   showAddModal.value = true
 }
 
@@ -879,22 +635,110 @@ const openEditModal = (schedule) => {
 
 const openPublishModal = () => {
   newDynamicText.value = ''
+  newDynamicImages.value = []
+  newDynamicDate.value = todayKey
   relatedScheduleSelected.value = ''
   showPublishModal.value = true
 }
 
-const goToNextMonth = () => {
-  currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + 1, 1)
+const chooseDynamicImages = () => {
+  const remain = 9 - newDynamicImages.value.length
+  if (remain <= 0) return
+  uni.chooseImage({
+    count: remain,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res) => {
+      newDynamicImages.value = [...newDynamicImages.value, ...res.tempFilePaths]
+    }
+  })
 }
 
-const goToPrevMonth = () => {
-  currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() - 1, 1)
+const removeDynamicImage = (idx) => {
+  newDynamicImages.value = newDynamicImages.value.filter((_, i) => i !== idx)
 }
 
-const selectDate = (day) => {
-  selectedDate.value = getDateKeyForDay(day)
+const openAuthModal = (mode) => {
+  authMode.value = mode || 'login'
+  authEmail.value = ''
+  authPassword.value = ''
+  authNickname.value = ''
+  authBio.value = ''
+  authGoals.value = ''
+  authSkills.value = ''
+  authInterests.value = ''
+  showAuthModal.value = true
 }
 
+const openProfileModal = () => {
+  editNickname.value = session.value.nickname || ''
+  editAvatar.value = session.value.avatar || ''
+  editBio.value = session.value.bio || ''
+  editGoals.value = session.value.goals || ''
+  editSkills.value = session.value.skills || ''
+  editInterests.value = session.value.interests || ''
+  showProfileModal.value = true
+}
+
+const chooseAvatar = () => {
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: async (res) => {
+      const filePath = res.tempFilePaths[0]
+      // In H5, blob URLs expire on refresh — convert to base64 for persistence
+      let persistentUrl = filePath
+      if (filePath.startsWith('blob:')) {
+        persistentUrl = await api.blobToBase64(filePath)
+      }
+
+      // Try to upload to server if logged in
+      if (isLoggedIn()) {
+        try {
+          const result = await api.uploadImage(filePath)
+          editAvatar.value = result.url
+          return
+        } catch (e) {}
+      }
+      editAvatar.value = persistentUrl
+    }
+  })
+}
+
+const saveProfile = async () => {
+  profileLoading.value = true
+  try {
+    if (isLoggedIn()) {
+      await api.updateProfile({
+        nickname: editNickname.value,
+        avatar: editAvatar.value,
+        bio: editBio.value,
+        goals: editGoals.value,
+        skills: editSkills.value,
+        interests: editInterests.value
+      })
+    }
+    updateState(state => {
+      state.session.nickname = editNickname.value
+      state.session.avatar = editAvatar.value
+      state.session.bio = editBio.value
+      state.session.goals = editGoals.value
+      state.session.skills = editSkills.value
+      state.session.interests = editInterests.value
+      return state
+    })
+    refreshState()
+    showProfileModal.value = false
+    uni.showToast({ title: '保存成功', icon: 'success' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '保存失败', icon: 'none' })
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+// 业务操作方法
 const toggleTask = async (task) => {
   try {
     if (isLoggedIn()) {
@@ -911,75 +755,125 @@ const toggleTask = async (task) => {
   }
 }
 
-const generateSchedule = () => {
-  if (!aiText.value.trim()) return
-  uni.showLoading({ title: '豆包AI正在解析...' })
-  api.requestAISchedule(aiText.value.trim())
-    .then((data) => {
-      // data may be { candidates: [...] } or simulated shape
-      if (data && data.candidates && Array.isArray(data.candidates)) {
-        // normalize minimal fields
-        aiCandidates.value = data.candidates.map((c) => ({
-          title: c.title || c.text || c[0] || aiText.value.slice(0, 60),
-          date: c.date || c.date || new Date().toISOString().slice(0, 10),
-          time: c.time || c.time || null,
-          priority: c.priority || 2,
-          category: c.category || c.category || null,
-          remark: c.remark || c.raw || ''
-        }))
-      } else if (data && data.simulated && data.candidates) {
-        aiCandidates.value = data.candidates
-      } else {
-        // fallback single candidate
-        aiCandidates.value = [{ title: aiText.value.slice(0, 60), date: new Date().toISOString().slice(0,10), time: null, priority: 2, category: null, remark: '' }]
-      }
-      aiSelectedIndex.value = 0
+const sendAiMessage = async (isInit = false) => {
+  // When called from @click event, the first argument is the Event object, not a boolean
+  if (typeof isInit !== 'boolean') isInit = false
+  const text = isInit ? '' : aiInput.value.trim()
+  if (!isInit && !text) return
+
+  if (!isInit) {
+    aiMessages.value.push({ role: 'user', content: text })
+    aiInput.value = ''
+  }
+
+  aiLoading.value = true
+
+  const apiMessages = aiMessages.value.map(m => ({ role: m.role, content: m.content }))
+
+  try {
+    const data = await api.aiChat({
+      messages: apiMessages,
+      schedules: schedules.value.map(s => ({
+        date: s.date,
+        time: s.time,
+        title: s.title,
+        location: s.location || '',
+        completed: s.completed
+      }))
     })
-    .catch(() => {
-      aiCandidates.value = [{ title: '去图书馆写网络大作业', date: new Date().toISOString().slice(0,10), time: '15:00', priority: 2, category: '学习', remark: '' }]
-      aiSelectedIndex.value = 0
+
+    const aiMsg = { role: 'assistant', content: data.reply, proposal: data.proposal || null }
+    aiMessages.value.push(aiMsg)
+  } catch (err) {
+    const errMsg = err?.message || '网络似乎有问题'
+    aiMessages.value.push({
+      role: 'assistant',
+      content: `抱歉，${errMsg}，请稍后再试～`,
+      proposal: null
     })
-    .finally(() => {
-      uni.hideLoading()
-    })
+  } finally {
+    aiLoading.value = false
+  }
 }
 
-const simulateVoiceInput = () => {
-  aiText.value = '下周六下午2点去奶茶店兼职'
-  uni.showToast({
-    title: '已识别语音内容',
-    icon: 'none'
-  })
-}
+const acceptProposal = async (msgIdx) => {
+  const msg = aiMessages.value[msgIdx]
+  if (!msg || !msg.proposal) return
 
-const confirmAISchedule = async () => {
-  const sel = aiCandidates.value[aiSelectedIndex.value]
-  if (!sel) return uni.showToast({ title: '请选择要添加的候选', icon: 'none' })
-
+  const p = msg.proposal
   const payload = {
-    title: sel.title,
-    date: sel.date || toDateKey(addDays(new Date(), 0)),
-    time: sel.time || '09:00',
-    categoryId: categories.value.find((c) => c.name === sel.category)?.id || null,
-    priority: sel.priority || 2,
-    remark: sel.remark || ''
+    title: p.title || '新日程',
+    date: p.date || todayKey,
+    time: p.time || '09:00',
+    priority: p.priority || 2,
+    remark: p.remark || '',
+    location: p.location || ''
   }
 
   try {
     if (isLoggedIn()) {
       const result = await api.createSchedule(payload)
       payload.id = String(result.id)
-      addSchedule({ ...payload, completed: false })
+      addSchedule({ ...payload, completed: false, categoryId: null })
     } else {
       addSchedule(payload)
     }
     refreshState()
-    showAIModal.value = false
-    aiCandidates.value = []
-    uni.showToast({ title: '已添加到日历', icon: 'success' })
+    msg.proposal = null
+    aiMessages.value.push({
+      role: 'assistant',
+      content: '已添加「' + p.title + '」到日历 📅 你可以在日历页查看～还有其他安排吗？',
+      proposal: null
+    })
   } catch (err) {
-    uni.showToast({ title: err.message || '保存失败', icon: 'none' })
+    uni.showToast({ title: err.message || '添加失败', icon: 'none' })
   }
+}
+
+const dismissProposal = (msgIdx) => {
+  aiMessages.value[msgIdx].proposal = null
+}
+
+const simulateVoiceInput = () => {
+  // #ifdef H5
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (SpeechRecognition) {
+    if (isRecording.value) {
+      isRecording.value = false
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'zh-CN'
+    recognition.interimResults = false
+    recognition.continuous = false
+
+    isRecording.value = true
+    uni.showToast({ title: '正在聆听...', icon: 'none', duration: 3000 })
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      aiInput.value = (aiInput.value ? aiInput.value + ' ' : '') + transcript
+      isRecording.value = false
+      uni.showToast({ title: '已识别', icon: 'success' })
+      // Auto-send after voice input
+      setTimeout(() => sendAiMessage(), 300)
+    }
+
+    recognition.onerror = (event) => {
+      isRecording.value = false
+      console.error('Speech error:', event.error)
+      uni.showToast({ title: '语音识别失败，请手动输入', icon: 'none' })
+    }
+
+    recognition.onend = () => {
+      isRecording.value = false
+    }
+
+    recognition.start()
+    return
+  }
+  // #endif
+  uni.showToast({ title: '语音功能需在H5环境使用', icon: 'none' })
 }
 
 const saveGeneralSchedule = async () => {
@@ -1037,18 +931,52 @@ const removeSchedule = async (scheduleId) => {
 }
 
 const saveNewDynamic = async () => {
-  if (!newDynamicText.value.trim()) {
-    uni.showToast({ title: '请输入动态内容', icon: 'none' })
+  if (!newDynamicText.value.trim() && !newDynamicImages.value.length) {
+    uni.showToast({ title: '请输入动态内容或添加图片', icon: 'none' })
     return
   }
+
+  uni.showLoading({ title: '发布中...' })
+
+  // Convert blob URLs to base64 first (blob URLs expire on refresh)
+  let imageUrls = []
+  try {
+    const converted = await Promise.all(
+      newDynamicImages.value.map(async (img) => {
+        if (img.startsWith('blob:')) return await api.blobToBase64(img)
+        return img
+      })
+    )
+
+    // If logged in, upload to server for cross-device sync
+    if (isLoggedIn() && converted.length) {
+      const uploads = await Promise.all(
+        converted.map(async (img) => {
+          if (img.startsWith('data:') || img.startsWith('blob:')) {
+            try {
+              const result = await api.uploadImage(img)
+              return result.url
+            } catch (e) { return img }
+          }
+          return img
+        })
+      )
+      imageUrls = uploads
+    } else {
+      imageUrls = converted
+    }
+  } catch (e) {
+    imageUrls = [...newDynamicImages.value]
+  }
+
   const now = new Date()
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
   const payload = {
     content: newDynamicText.value,
-    date: todayKey,
+    date: newDynamicDate.value,
     time: timeStr,
-    relatedScheduleId: relatedScheduleSelected.value || null,
-    imageUrls: []
+    relatedScheduleId: (() => { const id = relatedScheduleSelected.value; if (!id) return null; const num = Number(id); return Number.isFinite(num) && num > 0 ? num : null; })(),
+    imageUrls
   }
   try {
     if (isLoggedIn()) {
@@ -1063,6 +991,8 @@ const saveNewDynamic = async () => {
     uni.showToast({ title: '发布成功', icon: 'success' })
   } catch (err) {
     uni.showToast({ title: err.message || '发布失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
   }
 }
 
@@ -1075,16 +1005,16 @@ const toggleSelectRelation = () => {
 }
 
 const toggleMorningPush = () => {
-  updateSettings({ morningPushEnabled: !settings.value.morningPushEnabled })
+  const willEnable = !settings.value.morningPushEnabled
+  updateSettings({ morningPushEnabled: willEnable })
   refreshState()
   uni.showToast({
-    title: settings.value.morningPushEnabled ? '晨间推送已关闭' : '晨间推送已开启',
+    title: willEnable ? '晨间推送已开启' : '晨间推送已关闭',
     icon: 'none'
   })
 }
 
-const setMorningPushTime = (event) => {
-  const value = event.detail.value
+const setMorningPushTime = (value) => {
   updateSettings({ morningPushTime: value })
   refreshState()
   uni.showToast({ title: `已设置为 ${value}`, icon: 'none' })
@@ -1104,33 +1034,46 @@ const handleLogout = () => {
   })
 }
 
-const openAuthModal = (mode) => {
-  authMode.value = mode
-  authEmail.value = ''
-  authPassword.value = ''
-  showAuthModal.value = true
-}
-
 const submitAuth = async () => {
+  if (!authEmail.value.trim()) {
+    uni.showToast({ title: '请输入邮箱', icon: 'none' })
+    return
+  }
+  if (!authPassword.value || authPassword.value.length < 6) {
+    uni.showToast({ title: '密码至少6位', icon: 'none' })
+    return
+  }
+
   authLoading.value = true
   try {
-    const code = await new Promise((resolve, reject) => {
-      uni.login({
-        provider: 'weixin',
-        success: (res) => {
-          if (res && res.code) resolve(res.code)
-          else reject(new Error('微信登录失败，未返回 code'))
-        },
-        fail: (err) => reject(err)
-      })
-    })
+    const isRegister = authMode.value === 'register'
+    const payload = { email: authEmail.value.trim(), password: authPassword.value }
+    if (isRegister && authNickname.value.trim()) {
+      payload.nickname = authNickname.value.trim()
+    }
 
-    const response = await api.wechatLogin(code)
-    setSessionLocal({ userId: response.user.id, token: response.token, email: response.user.email || null })
+    const fn = isRegister ? api.register : api.login
+    if (isRegister) {
+      payload.bio = authBio.value.trim()
+      payload.goals = authGoals.value.trim()
+      payload.skills = authSkills.value.trim()
+      payload.interests = authInterests.value.trim()
+    }
+    const response = await fn(payload)
+    setSessionLocal({
+      userId: response.user.id,
+      token: response.token,
+      email: response.user.email,
+      nickname: response.user.nickname || '',
+      avatar: response.user.avatar || '',
+      bio: response.user.bio || '',
+      goals: response.user.goals || '',
+      skills: response.user.skills || '',
+      interests: response.user.interests || ''
+    })
     refreshState()
     showAuthModal.value = false
-    uni.showToast({ title: '登录成功', icon: 'success' })
-    // Sync data from server after login
+    uni.showToast({ title: isRegister ? '注册成功' : '登录成功', icon: 'success' })
     loadServerData()
   } catch (err) {
     uni.showToast({ title: err.message || '请求失败', icon: 'none' })
@@ -1145,405 +1088,363 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ==========================================================================
-   全局框架与布局结构
-   ========================================================================== */
-.app-container { height: 100vh; display: flex; flex-direction: column; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-.status-bar { height: 44px; width: 100%; background-color: #ffffff; }
-.main-content { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
-.scroll-container { width: 100%; height: 100%; padding-bottom: 68px; box-sizing: border-box; }
-.full-component-container { width: 100%; height: 100%; padding-bottom: 68px; box-sizing: border-box; display: flex; flex-direction: column; }
-.gray-divider { height: 8px; background-color: #f8fafc; width: 100%; }
+.app-container {
+  height: 100vh; display: flex; flex-direction: column;
+  background: var(--glass-bg-page);
+  font-family: var(--font-family);
+}
+.status-bar { height: 8px; width: 100%; background: rgba(255, 255, 255, 0.45); backdrop-filter: var(--glass-blur-xs) var(--glass-saturate); -webkit-backdrop-filter: var(--glass-blur-xs) var(--glass-saturate); }
+.main-content { flex: 1; position: relative; display: flex; flex-direction: column; }
 
 /* ==========================================================================
-   板块样式 1：日历事务管理
+   Bottom Tab Bar — Glass-morphism
    ========================================================================== */
-.calendar-view { display: flex; flex-direction: column; background-color: #ffffff; }
-.header-control { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background-color: #ffffff; }
-.title-text { font-size: 20px; font-weight: bold; color: #333333; }
-.view-switch { display: flex; background-color: #f1f5f9; padding: 3px; border-radius: 8px; }
-.switch-btn { padding: 4px 14px; font-size: 13px; color: #64748b; border-radius: 6px; }
-.active-switch { background-color: #ffffff; color: #3B82F6; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-
-.calendar-grid { padding: 0 8px 12px 8px; }
-.week-days { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 6px; }
-.day-label { text-align: center; font-size: 12px; color: #94a3b8; font-weight: 500; }
-.dates-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.date-cell { height: 56px; border: 1px solid #f8fafc; border-radius: 8px; display: flex; flex-direction: column; align-items: center; position: relative; }
-.empty-cell { height: 56px; }
-.is-today { background-color: rgba(74, 144, 226, 0.08); }
-.date-num { font-size: 13px; color: #334155; margin-top: 4px; font-weight: 500; }
-.today-num { width: 28px; height: 28px; background: linear-gradient(135deg, #4A90E2 0%, #3B82F6 100%); color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 13px; box-shadow: 0 6px 18px rgba(59,130,246,0.18); }
-
-.tags-row { display: flex; gap: 2px; margin-top: 6px; width: 100%; justify-content: center; padding: 0 4px; box-sizing: border-box; }
-.tag-line { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin: 0 3px; box-shadow: 0 1px 2px rgba(16,24,40,0.06); }
-.bg-main { background-color: #3B82F6; }
-.bg-orange { background-color: #FFA500; }
-.bg-green { background-color: #50C878; }
-
-.today-section { padding: 16px; background-color: #ffffff; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.section-title { font-size: 16px; font-weight: bold; color: #1e293b; }
-.section-sub { font-size: 12px; color: #94a3b8; }
-.task-list { display: flex; flex-direction: column; gap: 12px; }
-.task-item { display: flex; align-items: center; padding: 14px 16px; background-color: #ffffff; border: 1px solid #eef2f6; border-radius: 16px; box-shadow: 0 8px 24px rgba(16,24,40,0.06); position: relative; overflow: hidden; transition: transform 0.14s ease; }
-.task-item:hover { transform: translateY(-4px); }
-.task-check-box { margin-right: 12px; display: flex; align-items: center; justify-content: center; }
-.icon-unchecked { width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 50%; }
-.icon-checked { width: 20px; height: 20px; background-color: #cbd5e1; color: #ffffff; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; font-weight: bold; }
-.task-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.task-item-title { font-size: 15px; font-weight: 500; color: #334155; }
-.task-meta { display: flex; align-items: center; gap: 8px; }
-.task-time-tag { font-size: 11px; padding: 2px 6px; background-color: #f1f5f9; color: #64748b; border-radius: 4px; }
-.category-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
-.priority-line { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; background-color: #FFA500; }
-.line-through { text-decoration: line-through; color: #94a3b8 !important; }
-
-/* ==========================================================================
-   板块样式 2：提醒中心 (时间轴)
-   ========================================================================== */
-.reminder-view { padding: 16px; min-height: 100%; background: #ffffff; }
-.page-title { font-size: 20px; font-weight: bold; color: #333; margin-bottom: 20px; display: block; }
-.morning-banner { background: #f0f7ff; border: 1px solid #e0f2fe; border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.banner-left { display: flex; align-items: center; gap: 8px; }
-.banner-text { font-size: 14px; color: #374151; font-weight: 500; }
-.text-blue { color: #3B82F6; }
-.switch-ui { width: 40px; height: 20px; border-radius: 10px; background: #e5e7eb; position: relative; transition: background-color 0.2s; }
-.active-toggle { background: #3B82F6; }
-.switch-knob { width: 16px; height: 16px; background: #fff; border-radius: 50%; position: absolute; right: 2px; top: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s; }
-.knob-off { right: 22px !important; }
-
-.timeline-container { border-left: 2px solid #E5E5E5; margin-left: 8px; padding-bottom: 20px; }
-.timeline-section { position: relative; padding-left: 24px; margin-bottom: 28px; }
-.timeline-node { position: absolute; border-radius: 50%; }
-.node-blue { width: 8px; height: 8px; background: #3B82F6; left: -6px; top: 6px; }
-.node-green { width: 6px; height: 6px; background: #50C878; left: -5px; top: 6px; }
-.node-gray { width: 6px; height: 6px; background: #999999; left: -5px; top: 6px; }
-.section-title { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 12px; display: block; }
-.text-light-gray { color: #9ca3af; }
-
-.task-list-timeline { display: flex; flex-direction: column; gap: 12px; }
-.task-card { background: #fff; border: 1px solid #f3f4f6; padding: 12px; border-radius: 14px; box-shadow: 0 8px 20px rgba(16,24,40,0.04); position: relative; }
-.task-time-left, .task-date-left { position: absolute; left: -56px; top: 12px; font-size: 12px; color: #333; font-weight: 500; width: 48px; text-align: right; }
-.task-date-left { color: #6b7280; }
-.task-card-content { display: flex; justify-content: space-between; align-items: flex-start; }
-.task-info { display: flex; flex-direction: column; align-items: flex-start; }
-.task-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.action-btn { font-size: 11px; color: #64748b; }
-.task-title { font-size: 14px; font-weight: 500; color: #374151; }
-.text-red { color: #ef4444; }
-.text-gray { color: #4b5563; }
-.task-desc { font-size: 12px; color: #9ca3af; margin-top: 4px; display: block; }
-.task-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 6px; }
-.circle-check { width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 50%; }
-.card-expired { background: #f9fafb; opacity: 0.7; }
-
-/* completed task dimming */
-.card-completed { opacity: 0.6; }
-
-/* week grid */
-.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-.week-grid .date-cell { padding: 10px; background: #fff; border-radius: 10px; border: 1px solid #f3f4f6; display: flex; flex-direction: column; align-items: center; }
-
-/* ==========================================================================
-   板块样式 3：生活动态 (竖版左侧日期布局)
-   ========================================================================== */
-.moments-view { flex: 1; display: flex; flex-direction: column; height: 100%; background: #ededed; overflow: hidden; }
-
-/* 顶部标题栏 */
-.moments-top-bar { padding: 16px 20px 12px; background: #ededed; flex-shrink: 0; }
-.moments-title { font-size: 18px; font-weight: 700; color: #1a1a1a; display: block; }
-
-.moments-scroll { flex: 1; overflow-y: auto; }
-.moments-list { padding: 0 12px 80px 12px; }
-
-/* 卡片 - 左侧日期 + 右侧内容 */
-.moment-card {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  background: #fff;
-  margin-bottom: 8px;
-  border-radius: 4px;
-  padding: 14px 0;
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; width: 100%; height: 78px;
+  background: var(--glass-bg-tab);
+  backdrop-filter: var(--glass-blur-lg) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-lg) var(--glass-saturate);
+  display: flex; justify-content: space-around; align-items: center;
+  padding: 0 var(--space-lg) env(safe-area-inset-bottom);
+  z-index: var(--z-tab-bar);
+  box-shadow: var(--shadow-glass-tab);
 }
-
-/* 左侧日期栏 */
-.moment-date-col {
-  width: 52px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 2px;
-}
-.moment-date-day {
-  font-size: 15px;
-  font-weight: 600;
-  color: #333;
-  line-height: 1.2;
-}
-.moment-date-weekday {
-  font-size: 11px;
-  color: #999;
-  margin-top: 1px;
-}
-
-/* 右侧主内容 */
-.moment-main {
-  flex: 1;
-  min-width: 0;
-  padding-right: 12px;
-}
-
-/* 头部：头像 + 昵称 + 时间 */
-.moment-header {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 6px;
-}
-.moment-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 4px;
-  background: #e5e5e5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-right: 8px;
-}
-.moment-avatar-text { font-size: 20px; }
-.moment-header-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 38px;
-}
-.moment-nickname {
-  font-size: 14px;
-  font-weight: 600;
-  color: #576b95;
-  margin-bottom: 1px;
-  line-height: 1.3;
-}
-.moment-time {
-  font-size: 11px;
-  color: #9a9a9a;
-  line-height: 1.3;
-}
-
-/* 正文 */
-.moment-body {
-  margin-left: 46px;
-  margin-bottom: 6px;
-}
-.moment-content {
-  font-size: 15px;
-  color: #1f1f1f;
-  line-height: 1.55;
-  word-break: break-all;
-  white-space: pre-wrap;
-  display: block;
-}
-.moment-content-folded {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
-  overflow: hidden;
-}
-.moment-expand-btn {
-  font-size: 14px;
-  color: #576b95;
-  display: inline-block;
-  margin-top: 2px;
-}
-
-/* 图片九宫格 */
-.moment-images-grid {
-  margin-left: 46px;
-  margin-bottom: 6px;
-  display: grid;
-  gap: 2px;
-  max-width: 220px;
-}
-.grid-col-1 { grid-template-columns: 1fr; max-width: 170px; }
-.grid-col-2 { grid-template-columns: repeat(2, 1fr); max-width: 190px; }
-.grid-col-3 { grid-template-columns: repeat(3, 1fr); max-width: 220px; }
-
-.moment-image-wrap {
-  width: 100%;
-  padding-top: 100%;
+.tab-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; width: 64px; height: 56px;
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
   position: relative;
-  overflow: hidden;
-  border-radius: 2px;
-  background: #f0f0f0;
+  transition: all var(--transition-fast);
+  cursor: pointer;
 }
-.moment-image-single {
-  padding-top: 75%;
-  max-width: 170px;
-}
-.moment-image {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* 关联日程 */
-.moment-schedule-link {
-  margin-left: 46px;
-  margin-bottom: 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #f5f7fa;
-  border-radius: 4px;
-  padding: 5px 8px;
-  max-width: 230px;
-}
-.moment-link-icon { font-size: 12px; }
-.moment-link-text {
-  font-size: 12px;
-  color: #576b95;
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-/* 底部操作栏 */
-.moment-actions {
-  margin-left: 46px;
-  margin-top: 2px;
-  padding-top: 8px;
-  display: flex;
-  gap: 20px;
-  position: relative;
-}
-.moment-actions::before {
+.tab-item:active { transform: scale(0.92); background: var(--color-bg-hover); }
+.tab-active { color: var(--color-primary); }
+.tab-active::after {
   content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 16px;
-  height: 0.5px;
-  background: #e5e5e5;
-}
-.moment-action-item { display: flex; align-items: center; }
-.moment-action-text { font-size: 13px; color: #999; }
-
-/* 空状态 */
-.moments-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 100px 20px;
-  background: #fff;
+  position: absolute; bottom: 3px;
+  width: 22px; height: 3.5px;
+  background: var(--color-primary-gradient);
   border-radius: 4px;
+  box-shadow: 0 0 8px rgba(74, 158, 255, 0.40);
 }
-.empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
-.empty-text { font-size: 14px; color: #999; }
-
-/* FAB 发布按钮 */
-.moments-fab { position: fixed; right: 18px; bottom: 84px; width: 50px; height: 50px; border-radius: 50%; background: #07c160; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 12px rgba(7,193,96,0.3); z-index: 10; }
-.moments-fab-icon { color: #fff; font-size: 22px; }
-
-/* ==========================================================================
-   板块样式 4：个人中心
-   ========================================================================== */
-.profile-view { min-height: 100%; background: #f8fafc; }
-.profile-header { background: #3B82F6; padding: 40px 24px 32px; border-radius: 0 0 32px 32px; box-shadow: 0 6px 18px rgba(59,130,246,0.18); }
-.user-info { display: flex; align-items: center; gap: 16px; }
-.avatar-box { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5); display: flex; justify-content: center; align-items: center; font-size: 32px; }
-.text-info { display: flex; flex-direction: column; gap: 4px; }
-.user-name { font-size: 20px; font-weight: bold; color: #fff; }
-.user-sub { font-size: 14px; color: #dbeafe; }
-
-.profile-content { padding: 0 16px; margin-top: 24px; display: flex; flex-direction: column; gap: 16px; padding-bottom: 100px; }
-.stats-panel { background: #fff; border-radius: 16px; padding: 16px; display: flex; justify-content: space-around; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02); border: 1px solid #f3f4f6; }
-.stat-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.stat-num { font-size: 24px; font-weight: bold; color: #333; }
-.stat-label { font-size: 12px; color: #9ca3af; }
-.stat-divider { width: 1px; height: 40px; background: #f3f4f6; }
-
-.menu-group { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); border: 1px solid #f3f4f6; overflow: hidden; }
-.menu-row { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #f9fafb; }
-.no-border { border-bottom: none; }
-.menu-left { display: flex; align-items: center; gap: 12px; }
-.menu-icon { font-size: 18px; }
-.menu-text { font-size: 15px; color: #374151; }
-.text-red { color: #ef4444; }
-.menu-right { display: flex; align-items: center; gap: 8px; }
-.menu-value { font-size: 14px; color: #9ca3af; }
-.icon-right { font-size: 14px; color: #d1d5db; font-family: monospace; }
-.icon-left { font-size: 14px; color: #d1d5db; font-family: monospace; margin-right: 8px; }
+.tab-icon { font-size: 24px; line-height: 1; transition: transform var(--transition-spring); }
+.tab-active .tab-icon { transform: scale(1.1); }
+.tab-text {
+  font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.3px;
+}
 
 /* ==========================================================================
-   全局通用导航栏
+   Modal System — slide-up animation
    ========================================================================== */
-.tab-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 70px; background-color: rgba(255,255,255,0.88); backdrop-filter: blur(8px); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid rgba(230,236,246,0.9); padding-bottom: env(safe-area-inset-bottom); z-index: 99; box-shadow: 0 -6px 24px rgba(16,24,40,0.04); }
-.tab-item { display: flex; flex-direction: column; align-items: center; color: #94a3b8; width: 60px; }
-.tab-active { color: #3B82F6; }
-.tab-icon { font-size: 22px; margin-bottom: 2px; }
-.tab-text { font-size: 10px; font-weight: 600; }
+.modal-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(12, 30, 62, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.modal-content {
+  background: var(--glass-bg-modal);
+  backdrop-filter: var(--glass-blur-xl) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-xl) var(--glass-saturate);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  padding: var(--space-xl);
+  box-sizing: border-box;
+  max-height: 88vh;
+  overflow: hidden;
+  box-shadow: var(--shadow-glass-modal);
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); }
+
+.close-btn {
+  width: 32px; height: 32px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-secondary);
+  font-size: 18px; font-weight: var(--font-weight-medium);
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+.close-btn:active { background: var(--color-border); transform: scale(0.9); }
+
+.text-blue { color: var(--color-primary); font-weight: var(--font-weight-bold); }
+.modal-btn-group { display: flex; gap: var(--space-md); }
+.btn-secondary {
+  flex: 1; height: 46px; line-height: 46px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md); font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-md); border: none; text-align: center;
+  transition: all var(--transition-fast);
+}
+.btn-secondary:active { background: rgba(0, 0, 0, 0.08); transform: scale(0.97); }
+.btn-primary {
+  flex: 1; height: 46px; line-height: 46px;
+  background: var(--color-primary-gradient);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-md); font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-md); border: none; text-align: center;
+  box-shadow: var(--shadow-glass-primary);
+  transition: all var(--transition-fast);
+}
+.btn-primary:active { transform: scale(0.97); box-shadow: 0 2px 6px rgba(74, 158, 255, 0.15); }
 
 /* ==========================================================================
-   右下角悬浮按钮组(FAB)
+   AI Chat Modal
    ========================================================================== */
-.fab-group { position: fixed; right: 16px; bottom: 84px; display: flex; flex-direction: column; gap: 12px; z-index: 99; }
-.fab-ai { width: 44px; height: 44px; border-radius: 50%; background-color: #ffffff; color: #3B82F6; display: flex; justify-content: center; align-items: center; box-shadow: 0 6px 18px rgba(16,24,40,0.06); border: 1px solid rgba(59,130,246,0.12); font-size: 18px; }
-.fab-add { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg,#4A90E2 0%, #3B82F6 100%); color: #ffffff; display: flex; justify-content: center; align-items: center; box-shadow: 0 14px 36px rgba(59,130,246,0.28); font-size: 30px; }
+.ai-chat-modal { height: 85vh; display: flex; flex-direction: column; }
+.ai-chat-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+}
+.ai-chat-title {
+  font-size: var(--font-size-xl); font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+.ai-chat-body { flex: 1; overflow-y: auto; padding: var(--space-md) 0; }
+.ai-msg-wrapper { margin-bottom: var(--space-md); }
+.ai-msg { display: flex; gap: var(--space-sm); max-width: 88%; }
+.ai-msg-assistant { align-self: flex-start; }
+.ai-msg-user { align-self: flex-end; margin-left: auto; flex-direction: row-reverse; }
+.ai-msg-avatar {
+  width: 34px; height: 34px; border-radius: var(--radius-full);
+  background: var(--color-primary-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.ai-msg-bubble {
+  background: rgba(240, 245, 252, 0.70);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-xs);
+  padding: var(--space-md) var(--space-lg);
+  max-width: 280px;
+  box-shadow: var(--shadow-glass-card);
+}
+.user-bubble {
+  background: linear-gradient(135deg, #7DBAFF 0%, #4A9EFF 100%);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+  box-shadow: var(--shadow-glass-primary);
+}
+.ai-msg-text {
+  font-size: var(--font-size-base); color: var(--color-text-primary);
+  line-height: var(--line-height-relaxed); white-space: pre-wrap; word-break: break-word;
+}
+.user-text { color: var(--color-text-inverse); }
+
+/* Typing indicator */
+.ai-typing {
+  display: flex; gap: 5px; align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-xs);
+  background: var(--color-bg-hover);
+}
+.ai-dot {
+  width: 7px; height: 7px; border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+  animation: dotBounce 1.4s ease-in-out infinite;
+}
+.ai-dot:nth-child(2) { animation-delay: 0.16s; }
+.ai-dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* AI Proposal Card */
+.ai-proposal-card {
+  background: var(--glass-bg-medium);
+  backdrop-filter: var(--glass-blur-xs) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-xs) var(--glass-saturate);
+  border: 1px solid rgba(74, 158, 255, 0.12);
+  box-shadow: var(--shadow-glass-card);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-top: var(--space-sm);
+}
+.proposal-header {
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
+  color: var(--color-primary); margin-bottom: var(--space-sm);
+}
+.proposal-field { margin-bottom: 6px; }
+.proposal-label {
+  font-size: var(--font-size-xs); color: var(--color-text-muted);
+  display: block; margin-bottom: 2px;
+}
+.proposal-input {
+  font-size: var(--font-size-base); color: var(--color-text-primary);
+  height: 32px; border-bottom: 1.5px solid var(--color-border); width: 100%;
+}
+.proposal-value { font-size: var(--font-size-base); color: var(--color-text-primary); line-height: 32px; }
+.proposal-row { display: flex; gap: var(--space-md); }
+.flex-1 { flex: 1; }
+.priority-options { display: flex; gap: 6px; }
+.p-opt {
+  padding: 3px 12px; font-size: var(--font-size-sm);
+  border-radius: var(--radius-xl); background: var(--color-bg-hover);
+  color: var(--color-text-secondary); cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.p-active { background: var(--color-primary); color: var(--color-text-inverse); }
+.proposal-btn {
+  flex: 1; height: 36px; line-height: 36px;
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm); border: none; text-align: center;
+  transition: all var(--transition-fast);
+}
+.proposal-btn:active { transform: scale(0.96); }
+.proposal-btn-add { background: var(--color-primary-gradient); color: var(--color-text-inverse); }
+.proposal-btn-ignore { background: var(--color-bg-hover); color: var(--color-text-muted); }
+
+/* AI Chat Footer */
+.ai-chat-footer { flex-shrink: 0; border-top: 1px solid var(--color-border-light); padding-top: var(--space-sm); }
+.ai-chat-input-row { display: flex; align-items: center; gap: var(--space-sm); }
+.ai-chat-mic {
+  width: 38px; height: 38px; border-radius: var(--radius-full);
+  background: var(--color-bg-hover);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+.ai-chat-mic:active { transform: scale(0.9); }
+.mic-recording {
+  background: var(--color-danger-bg);
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.25);
+  animation: pulse-ring 1.2s infinite;
+}
+.ai-chat-input {
+  flex: 1; height: 38px;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: 19px; padding: 0 var(--space-lg);
+  font-size: var(--font-size-base); color: var(--color-text-primary);
+}
+.ai-chat-send {
+  width: 38px; height: 38px; border-radius: var(--radius-full);
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+  transition: all var(--transition-spring);
+  cursor: pointer;
+}
+.send-active {
+  background: var(--color-primary-gradient);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-primary);
+  transform: scale(1.05);
+}
 
 /* ==========================================================================
-   全局弹窗机制样式
+   Add / Edit / Publish Modals
    ========================================================================== */
-.modal-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.4); z-index: 999; display: flex; flex-direction: column; justify-content: flex-end; }
-.modal-content { background-color: #ffffff; border-radius: 24px 24px 0 0; padding: 20px; box-sizing: border-box; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.ai-modal { min-height: 320px; }
-.ai-title { color: #3B82F6; font-weight: bold; font-size: 17px; }
-.close-btn { background-color: #f1f5f9; width: 24px; height: 24px; text-align: center; border-radius: 50%; line-height: 22px; color: #64748b; font-size: 16px; }
-
-.ai-tips { font-size: 13px; color: #64748b; margin-bottom: 12px; display: block; line-height: 1.4; }
-.ai-input-area { position: relative; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; }
-.ai-textarea { width: 100%; height: 100px; font-size: 15px; color: #334155; line-height: 1.5; }
-.ai-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
-.mic-btn { width: 32px; height: 32px; background-color: #ffffff; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-size: 16px; }
-.send-btn { width: 32px; height: 32px; background-color: #e2e8f0; color: #94a3b8; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 16px; transition: all 0.2s; }
-.send-active { background-color: #3B82F6; color: #ffffff; box-shadow: 0 6px 18px rgba(59,130,246,0.18); }
-
-/* AI 结果确认卡片 */
-.ai-result-card { background-color: #f0f7ff; border: 1px solid #e0f2fe; border-radius: 14px; padding: 16px; margin-bottom: 20px; }
-.result-card-title { font-size: 17px; font-weight: bold; color: #1e293b; margin-bottom: 10px; display: block; }
-.result-line { font-size: 14px; color: #475569; display: block; margin-bottom: 6px; }
-.text-blue { color: #3B82F6; font-weight: bold; }
-.modal-btn-group { display: flex; gap: 12px; }
-.btn-secondary { flex: 1; height: 44px; line-height: 44px; background-color: #f1f5f9; color: #475569; font-size: 15px; font-weight: 500; border-radius: 12px; border: none; text-align: center; }
-.btn-primary { flex: 1; height: 44px; line-height: 44px; background-color: #3B82F6; color: #ffffff; font-size: 15px; font-weight: 500; border-radius: 12px; box-shadow: 0 8px 22px rgba(59,130,246,0.16); border: none; text-align: center; }
-
-/* 常规添加日程 / 动态弹窗表单样式 */
 .add-modal { height: 85vh; display: flex; flex-direction: column; }
-.add-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; }
-.btn-cancel { color: #94a3b8; font-size: 15px; }
-.btn-save { color: #3B82F6; font-size: 15px; font-weight: bold; }
-.add-modal-title { font-size: 16px; font-weight: bold; color: #333333; }
-.add-form { padding-top: 20px; display: flex; flex-direction: column; gap: 20px; }
-.input-title { width: 100%; font-size: 20px; font-weight: bold; color: #333333; height: 40px; }
-.form-row { display: flex; align-items: center; gap: 12px; }
+.add-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: var(--space-lg); border-bottom: 1px solid var(--color-border-light);
+}
+.btn-cancel { color: var(--color-text-muted); font-size: var(--font-size-md); }
+.btn-save { color: var(--color-primary); font-size: var(--font-size-md); font-weight: var(--font-weight-bold); }
+.add-modal-title {
+  font-size: var(--font-size-lg); font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+.add-form { padding-top: var(--space-xl); display: flex; flex-direction: column; gap: var(--space-xl); }
+.input-title {
+  width: 100%; font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary); height: 40px;
+}
+.form-row { display: flex; align-items: center; gap: var(--space-md); }
 .row-icon { font-size: 18px; width: 24px; text-align: center; }
-.row-text { font-size: 15px; color: #334155; }
-.schedule-selector { display: flex; align-items: center; gap: 8px; }
-.schedule-list { display: flex; flex-direction: column; gap: 8px; }
-.schedule-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 10px; background-color: #f8fafc; border: 1px solid #e2e8f0; }
-.schedule-item-active { border-color: #3B82F6; background-color: #f0f7ff; }
-.schedule-item-title { font-size: 13px; color: #1f2937; }
-.schedule-item-time { font-size: 12px; color: #64748b; }
-.category-options { display: flex; gap: 8px; }
-.opt-badge { padding: 4px 14px; font-size: 12px; background-color: #f1f5f9; color: #64748b; border-radius: 20px; }
-.opt-active { background-color: #3B82F6; color: #ffffff; font-weight: 500; }
-.form-textarea { width: 100%; height: 120px; background-color: #f8fafc; border-radius: 12px; padding: 12px; box-sizing: border-box; font-size: 14px; }
+.row-text { font-size: var(--font-size-md); color: var(--color-text-primary); }
+
+.schedule-selector { display: flex; align-items: center; gap: var(--space-sm); }
+.schedule-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+.schedule-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md); background: var(--color-bg-input);
+  border: 1.5px solid var(--color-border);
+  transition: all var(--transition-fast);
+}
+.schedule-item-active { border-color: var(--color-primary); background: var(--color-primary-bg); }
+.schedule-item-title { font-size: var(--font-size-sm); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+.schedule-item-time { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+
+.category-options { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+.opt-badge {
+  padding: 6px 16px; font-size: var(--font-size-sm);
+  background: var(--color-bg-hover); color: var(--color-text-secondary);
+  border-radius: var(--radius-xl); border: 1.5px solid transparent;
+  transition: all var(--transition-fast); cursor: pointer;
+  font-weight: var(--font-weight-medium);
+}
+.opt-active {
+  background: var(--color-primary-bg); color: var(--color-primary);
+  border-color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.form-textarea {
+  width: 100%; height: 120px;
+  background: var(--color-bg-input); border-radius: var(--radius-md);
+  padding: var(--space-md); box-sizing: border-box;
+  font-size: var(--font-size-base); color: var(--color-text-primary);
+}
+
+/* Image Picker */
+.image-picker-area { margin-top: var(--space-xs); }
+.image-preview-grid { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.image-preview-item {
+  width: 72px; height: 72px; border-radius: var(--radius-sm);
+  overflow: hidden; position: relative;
+}
+.preview-img { width: 100%; height: 100%; }
+.img-remove-btn {
+  position: absolute; top: 2px; right: 2px;
+  width: 20px; height: 20px; background: rgba(0,0,0,0.5);
+  color: var(--color-text-inverse); border-radius: var(--radius-full);
+  text-align: center; line-height: 20px; font-size: 14px;
+}
+.image-add-btn {
+  width: 72px; height: 72px; border-radius: var(--radius-sm);
+  border: 1.5px dashed var(--color-border-strong);
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  background: var(--color-bg-hover);
+  transition: all var(--transition-fast);
+}
+.image-add-btn:active { background: var(--color-border-light); }
+.add-icon { font-size: 20px; color: var(--color-text-muted); }
+.add-text { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
+
+/* Auth Form */
+.auth-form { width: 100%; }
+
+/* Profile Edit */
+.profile-avatar-edit {
+  width: 88px; height: 88px; border-radius: var(--radius-full);
+  background: var(--color-bg-hover);
+  display: flex; justify-content: center; align-items: center;
+  position: relative; overflow: hidden;
+  cursor: pointer; transition: transform var(--transition-normal);
+}
+.profile-avatar-edit:active { transform: scale(0.95); }
+.profile-avatar-img { width: 100%; height: 100%; border-radius: var(--radius-full); }
+.profile-avatar-placeholder { font-size: 40px; }
+.profile-avatar-overlay {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 28px;
+  background: rgba(0,0,0,0.5);
+  display: flex; justify-content: center; align-items: center;
+}
+.profile-avatar-overlay text { color: var(--color-text-inverse); font-size: var(--font-size-sm); }
 </style>
