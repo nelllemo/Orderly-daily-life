@@ -232,34 +232,42 @@ const buildLocalReply = (messages, schedules, todayStr) => {
 
 // POST /api/ai/resume — generate personal growth resume from user data
 router.post('/resume', authMiddleware, async (req, res, next) => {
+  const t0 = Date.now()
+  console.log('[resume] request received for user', req.user?.userId)
   try {
     const userId = req.user.userId
 
     // Fetch user profile with new fields
+    const t1 = Date.now()
     const users = await db.query(
       'SELECT id, email, nickname, avatar, bio, goals, skills, interests FROM user WHERE id = ?',
       [userId]
     )
+    console.log(`[resume] profile query: ${Date.now() - t1}ms`)
     if (!users.length) return res.status(404).json({ message: 'User not found.' })
     const profile = users[0]
 
     // Fetch completed schedules
+    const t2 = Date.now()
     const schedules = await db.query(
       'SELECT title, date, time, remark, location FROM schedule WHERE user_id = ? AND completed = 1 ORDER BY date DESC LIMIT 20',
       [userId]
     )
+    console.log(`[resume] schedules query: ${Date.now() - t2}ms, rows=${schedules.length}`)
 
     // Fetch recent moments
+    const t3 = Date.now()
     const moments = await db.query(
       'SELECT content, date FROM moment WHERE user_id = ? ORDER BY date DESC LIMIT 10',
       [userId]
     )
+    console.log(`[resume] moments query: ${Date.now() - t3}ms, rows=${moments.length}`)
 
-    // Use local fallback (AI call is async-optional for future enhancement)
-    // The local fallback produces quality results from user's own data
-    return res.json(buildLocalResume(profile, schedules, moments))
+    const result = buildLocalResume(profile, schedules, moments)
+    console.log(`[resume] total: ${Date.now() - t0}ms`)
+    return res.json(result)
   } catch (err) {
-    console.error('Resume generation error:', err.message)
+    console.error('[resume] error:', err.message, 'total:', Date.now() - t0, 'ms')
     next(err)
   }
 })

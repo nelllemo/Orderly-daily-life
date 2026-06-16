@@ -44,6 +44,7 @@
 7	2026.6.11	陈熙雅	v2.0版本：完成动态页面竖版左侧日期布局改造（移除顶部日期筛选器，改为卡片左侧显示日期+星期），优化朋友圈样式（微信绿FAB按钮、纯文字操作栏、紧致九宫格），完成API全CRUD对接与云端数据同步	V2.0
 8	2026.6.15	陈熙雅	完成系统测试：编写74条测试用例，发现并修复19个缺陷（严重3个、严重5个、一般5个、轻微6个），重点修复服务器崩溃、PUT接口数据丢失、前端逻辑错误等关键问题	V2.1
 9	2026.6.16	陈熙雅	v2.2版本：完成Apple Liquid Glass玻璃拟态全局UI改造（6文件~200行CSS）、修复移动端按钮点击无响应问题、实现图片Blob URL转Base64持久化存储、修复登录dotenv路径问题、新增用户资料字段(bio/goals/skills/interests)、ProfileView改造为AI智能个人成长简历展示、新增/api/ai/resume接口、修复动态发布FAB点击问题、修复relatedScheduleId类型错误导致500、修复过期Blob URL图片加载报错	V2.2
+10	2026.6.16	陈熙雅	v2.3版本：修复"我的"页面"关于"按钮错误触发登录弹窗的bug、补全底部设置菜单项(分类管理/提醒推送/数据同步/通用设置)、新增账号注销功能(前端二次确认+后端DELETE /api/auth/account)、修复AI简历生成接口GET/POST方法不匹配导致超时、修复玻璃拟态模态框backdrop-filter吞掉点击事件、新增vite.config.js开发代理转发/api和/uploads到5080端口、注册表单新增内联错误提示、新用户注册后清空本地种子数据并弹出欢迎引导弹窗	V2.3
 				
 				
 				
@@ -769,6 +770,32 @@ e.用户可点击"重新生成"刷新简历内容
 •FAB样式调整：白色圆形悬浮按钮+蓝色边框，匹配CalendarView风格
 •Moments 500修复：relatedScheduleId非数字时后端自动净化为null（本地ID如"sch-xxx"不再导致SQL错误）
 •简历请求优化：移除无响应的外部AI API同步等待，改为本地算法立即返回（响应时间从~5s降至~60ms）
+9.8 v2.3版本修复与优化详情（2026.06.16）
+9.8.1 "关于"按钮修复
+•问题：ProfileView底部"关于有序日常"按钮点击触发的是登录弹窗（emit('open-auth-modal', 'login')）
+•修复：改为emit('open-about-modal')，新增关于弹窗展示版本号和产品简介
+9.8.2 底部菜单项补全
+•问题：我的页面底部仅有登录/注册和退出登录，缺少设置功能入口
+•修复：新增分类管理、提醒与推送设置、数据同步、通用设置四个菜单项（登录后可见），点击提示"即将上线"
+9.8.3 账号注销功能
+•前端：ProfileView新增"账号注销"按钮，二次确认弹窗要求输入"确认注销"防止误操作
+•后端：新增DELETE /api/auth/account接口，authMiddleware保护，数据库级联删除用户所有数据
+9.8.4 AI简历接口修复
+•问题：前端generateResume()调用request()时未传method:'POST'，默认GET请求到POST路由导致超时
+•修复：显式指定method:'POST' + Content-Type:application/json + 超时30s，后端实测200 OK响应<1s
+9.8.5 模态框按钮点击修复
+•问题：.modal-mask的backdrop-filter:blur(4px)在Chrome中创建GPU合成层吞掉点击事件，导致提交/注册按钮无响应
+•修复：移除.modal-mask上的backdrop-filter，.modal-content加pointer-events:auto
+9.8.6 开发代理配置
+•问题：HBuilderX开发服务器端口5173，后端Express端口5080，前端/api请求发到5173返回404
+•修复：新增vite.config.js，配置Vite代理将/api和/uploads转发到http://localhost:5080
+9.8.7 注册表单内联错误提示
+•问题：注册失败时仅通过uni.showToast提示，错误信息可能被模态框遮挡
+•修复：新增authError状态，表单上方显示红色边框错误卡片，同时保留Toast作为备用反馈
+9.8.8 新用户注册优化
+•问题：新用户注册后本地种子数据（示例日程/动态）未清空，导致新用户看到非自己的数据
+•修复：loadServerData新增isNewUser参数，注册时清空本地schedules和moments为空数组
+•新增功能：注册成功后弹出5卡片引导弹窗，介绍日历、提醒、动态、AI助手、成长简历五大模块
 10. 附录
 10.1 术语表
 术语	定义

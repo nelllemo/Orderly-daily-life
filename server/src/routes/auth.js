@@ -148,4 +148,18 @@ router.put('/profile', authMiddleware, async (req, res, next) => {
   }
 })
 
+// DELETE /api/auth/account — permanently delete user and all their data
+router.delete('/account', authMiddleware, async (req, res, next) => {
+  try {
+    const userId = req.user.userId
+    // Cascade deletes handle: schedule (fk_schedule_user), moment (fk_moment_user)
+    // But we also need to clean up any orphaned data. The FK constraints with
+    // ON DELETE CASCADE will handle child rows automatically.
+    await db.query('DELETE FROM user WHERE id = ?', [userId])
+    return res.json({ ok: true, message: 'Account deleted.' })
+  } catch (err) {
+    next(err)
+  }
+})
+
 module.exports = router

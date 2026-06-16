@@ -136,17 +136,43 @@
           </view>
         </template>
 
-        <!-- Footer actions: login/logout -->
+        <!-- Footer actions -->
         <view class="footer-actions">
           <view v-if="session.isGuest" class="footer-action-row" @click="emit('open-auth-modal', 'login')">
             <text class="footer-action-icon">🔑</text>
             <text class="footer-action-text">登录 / 注册</text>
             <text class="footer-action-arrow">></text>
           </view>
-          <view class="footer-action-row" @click="emit('open-auth-modal', 'login')">
+          <template v-if="!session.isGuest">
+            <view class="footer-action-row" @click="handleMenuItem('categories')">
+              <text class="footer-action-icon">📂</text>
+              <text class="footer-action-text">分类管理</text>
+              <text class="footer-action-arrow">></text>
+            </view>
+            <view class="footer-action-row" @click="handleMenuItem('reminders')">
+              <text class="footer-action-icon">🔔</text>
+              <text class="footer-action-text">提醒与推送设置</text>
+              <text class="footer-action-arrow">></text>
+            </view>
+            <view class="footer-action-row" @click="handleMenuItem('sync')">
+              <text class="footer-action-icon">☁️</text>
+              <text class="footer-action-text">数据同步</text>
+              <text class="footer-action-arrow">></text>
+            </view>
+          </template>
+          <view class="footer-action-row" @click="handleMenuItem('general')">
+            <text class="footer-action-icon">⚙️</text>
+            <text class="footer-action-text">通用设置</text>
+            <text class="footer-action-arrow">></text>
+          </view>
+          <view class="footer-action-row" @click="emit('open-about-modal')">
             <text class="footer-action-icon">ℹ️</text>
             <text class="footer-action-text">关于有序日常</text>
             <text class="footer-action-arrow">></text>
+          </view>
+          <view v-if="!session.isGuest" class="footer-action-row footer-logout" @click="handleDeleteAccount">
+            <text class="footer-action-icon">🗑️</text>
+            <text class="footer-action-text text-red">账号注销</text>
           </view>
           <view v-if="!session.isGuest" class="footer-action-row footer-logout" @click="emit('logout')">
             <text class="footer-action-icon">🚪</text>
@@ -168,7 +194,32 @@ const props = defineProps({
   momentsCount: { type: Number, default: 0 }
 })
 
-const emit = defineEmits(['open-auth-modal', 'logout', 'open-profile-modal'])
+const emit = defineEmits(['open-auth-modal', 'logout', 'open-profile-modal', 'open-about-modal', 'delete-account'])
+
+const handleMenuItem = (key) => {
+  const titles = {
+    categories: '分类管理',
+    reminders: '提醒与推送设置',
+    sync: '数据同步',
+    general: '通用设置'
+  }
+  uni.showToast({ title: titles[key] + ' 即将上线，敬请期待', icon: 'none' })
+}
+
+const handleDeleteAccount = () => {
+  uni.showModal({
+    title: '注销账号',
+    content: '注销后将永久删除您的所有数据，包括日程、动态和个人信息，此操作不可撤销。确定继续吗？',
+    confirmText: '确认注销',
+    cancelText: '取消',
+    confirmColor: '#EF4444',
+    success: (res) => {
+      if (res.confirm) {
+        emit('delete-account')
+      }
+    }
+  })
+}
 
 const completedTasksCount = computed(() =>
   props.schedules.filter((t) => t.completed).length

@@ -56,6 +56,8 @@
         :momentsCount="moments.length"
         @open-auth-modal="openAuthModal"
         @open-profile-modal="openProfileModal"
+        @open-about-modal="showAboutModal = true"
+        @delete-account="handleDeleteAccount"
         @logout="handleLogout"
       />
 
@@ -334,6 +336,9 @@
               <input type="text" v-model="authSkills" placeholder="技能标签（选填，如：Python, 摄影, 日语）" class="input-title" style="font-size:14px; height:40px; margin-top:8px;" />
               <input type="text" v-model="authInterests" placeholder="兴趣爱好（选填，如：跑步, 阅读, 音乐）" class="input-title" style="font-size:14px; height:40px; margin-top:8px;" />
             </template>
+            <view v-if="authError" style="margin-top:12px; padding:10px; background:#FEF2F2; border-radius:8px; border:1px solid #FCA5A5;">
+              <text style="color:#DC2626; font-size:13px;">{{ authError }}</text>
+            </view>
             <view style="margin-top:20px;">
               <button class="btn-primary" style="width:100%;" @click="submitAuth">{{ authLoading ? '处理中...' : (authMode === 'register' ? '注册' : '登录') }}</button>
             </view>
@@ -395,6 +400,81 @@
     </view>
     </Transition>
 
+    <!-- F. 关于弹窗 -->
+    <Transition name="modal">
+    <view v-if="showAboutModal" class="modal-mask" @click="showAboutModal = false">
+      <Transition name="slide-up">
+      <view class="modal-content add-modal" @click.stop>
+        <view class="add-header">
+          <text class="btn-cancel" @click="showAboutModal = false">关闭</text>
+          <text class="add-modal-title">关于有序日常</text>
+          <text></text>
+        </view>
+        <view style="padding:24px;text-align:center;">
+          <text style="font-size:48px;display:block;margin-bottom:12px;">📋</text>
+          <text style="font-size:20px;font-weight:700;color:#1f2937;display:block;margin-bottom:4px;">有序日常 v2.2</text>
+          <text style="font-size:13px;color:#9ca3af;display:block;margin-bottom:20px;">Orderly Daily Life</text>
+          <view style="background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:12px;">
+            <text style="font-size:14px;color:#4b5563;line-height:1.8;">
+              集智能日程管理、定时提醒、私密生活记录、AI智能辅助于一体的轻量化综合生活管理工具。
+            </text>
+          </view>
+          <text style="font-size:12px;color:#9ca3af;">© 2026 有序日常 · 个人开发团队</text>
+        </view>
+      </view>
+      </Transition>
+    </view>
+    </Transition>
+
+    <!-- G. 新用户引导弹窗 -->
+    <Transition name="modal">
+    <view v-if="showOnboarding" class="modal-mask" @click="showOnboarding = false">
+      <view class="modal-content add-modal" @click.stop style="overflow-y:auto;">
+        <view class="add-header">
+          <text class="add-modal-title">🎉 欢迎加入有序日常</text>
+          <text class="btn-save" @click="showOnboarding = false">开始使用</text>
+        </view>
+        <view style="padding:0 4px 20px;">
+          <view class="onboarding-card">
+            <text class="onboarding-emoji">📅</text>
+            <view class="onboarding-text">
+              <text class="onboarding-title">日历管理</text>
+              <text class="onboarding-desc">在日历标签页查看日程，点击任意日期快速添加新任务，支持天/周/月三种视图自由切换</text>
+            </view>
+          </view>
+          <view class="onboarding-card">
+            <text class="onboarding-emoji">🔔</text>
+            <view class="onboarding-text">
+              <text class="onboarding-title">智能提醒</text>
+              <text class="onboarding-desc">为重要日程设置提醒时间，每日早晨推送当日待办清单，时间轴展示让你不再遗漏任何事</text>
+            </view>
+          </view>
+          <view class="onboarding-card">
+            <text class="onboarding-emoji">✍️</text>
+            <view class="onboarding-text">
+              <text class="onboarding-title">生活动态</text>
+              <text class="onboarding-desc">记录学习和生活的点滴成长，支持图文发布、日程关联，仅自己可见的私密空间</text>
+            </view>
+          </view>
+          <view class="onboarding-card">
+            <text class="onboarding-emoji">🤖</text>
+            <view class="onboarding-text">
+              <text class="onboarding-title">AI 小助手</text>
+              <text class="onboarding-desc">日历页右下角蓝色FAB按钮唤醒AI，用自然语言描述即可自动生成日程。比如"明天下午3点去图书馆复习"</text>
+            </view>
+          </view>
+          <view class="onboarding-card">
+            <text class="onboarding-emoji">📋</text>
+            <view class="onboarding-text">
+              <text class="onboarding-title">成长简历</text>
+              <text class="onboarding-desc">在"我的"页面查看AI为你生成的个人成长档案，记录技能积累和成就亮点。先完善个人资料效果更好哦～</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+    </Transition>
+
   </view>
 </template>
 
@@ -443,7 +523,7 @@ const todayKey = toDateKey(new Date())
 
 const isLoggedIn = () => !session.value.isGuest && session.value.token
 
-const loadServerData = async () => {
+const loadServerData = async (isNewUser = false) => {
   if (session.value.isGuest || !session.value.token) return
   try {
     // Sync profile
@@ -466,49 +546,60 @@ const loadServerData = async () => {
       api.fetchSchedules(),
       api.fetchMoments()
     ])
-    if (serverSchedules && serverSchedules.length) {
-      const serverMapped = serverSchedules.map(s => ({
-        id: String(s.id),
-        title: s.title,
-        date: s.date,
-        time: s.time,
-        categoryId: s.categoryId,
-        priority: s.priority,
-        remark: s.remark || '',
-        location: s.location || '',
-        completed: Boolean(s.completed),
-        remindAt: s.remindAt || null
-      }))
+
+    if (isNewUser) {
+      // New registration: server is empty, clear local seed data entirely
       updateState(state => {
-        const serverIds = new Set(serverMapped.map(s => s.id))
-        const localOnly = state.schedules.filter(s => !serverIds.has(s.id))
-        state.schedules = [...serverMapped, ...localOnly].sort((a, b) => {
-          const da = `${a.date}T${a.time || '00:00'}`
-          const db = `${b.date}T${b.time || '00:00'}`
-          return db.localeCompare(da)
-        })
+        state.schedules = []
+        state.moments = []
         return state
       })
-    }
-    if (serverMoments && serverMoments.length) {
-      const serverMapped = serverMoments.map(m => ({
-        id: String(m.id),
-        content: m.content,
-        date: m.date,
-        time: m.time,
-        relatedScheduleId: m.relatedScheduleId ? String(m.relatedScheduleId) : null,
-        imageUrls: m.imageUrls || []
-      }))
-      updateState(state => {
-        const serverIds = new Set(serverMapped.map(m => m.id))
-        const localOnly = state.moments.filter(m => !serverIds.has(m.id))
-        state.moments = [...serverMapped, ...localOnly].sort((a, b) => {
-          const da = `${a.date}T${a.time || '00:00'}`
-          const db = `${b.date}T${b.time || '00:00'}`
-          return db.localeCompare(da)
+    } else {
+      // Existing user login: merge server + local-only data
+      if (serverSchedules) {
+        const serverMapped = serverSchedules.map(s => ({
+          id: String(s.id),
+          title: s.title,
+          date: s.date,
+          time: s.time,
+          categoryId: s.categoryId,
+          priority: s.priority,
+          remark: s.remark || '',
+          location: s.location || '',
+          completed: Boolean(s.completed),
+          remindAt: s.remindAt || null
+        }))
+        updateState(state => {
+          const serverIds = new Set(serverMapped.map(s => s.id))
+          const localOnly = state.schedules.filter(s => !serverIds.has(s.id))
+          state.schedules = [...serverMapped, ...localOnly].sort((a, b) => {
+            const da = `${a.date}T${a.time || '00:00'}`
+            const db = `${b.date}T${b.time || '00:00'}`
+            return db.localeCompare(da)
+          })
+          return state
         })
-        return state
-      })
+      }
+      if (serverMoments) {
+        const serverMapped = serverMoments.map(m => ({
+          id: String(m.id),
+          content: m.content,
+          date: m.date,
+          time: m.time,
+          relatedScheduleId: m.relatedScheduleId ? String(m.relatedScheduleId) : null,
+          imageUrls: m.imageUrls || []
+        }))
+        updateState(state => {
+          const serverIds = new Set(serverMapped.map(m => m.id))
+          const localOnly = state.moments.filter(m => !serverIds.has(m.id))
+          state.moments = [...serverMapped, ...localOnly].sort((a, b) => {
+            const da = `${a.date}T${a.time || '00:00'}`
+            const db = `${b.date}T${b.time || '00:00'}`
+            return db.localeCompare(da)
+          })
+          return state
+        })
+      }
     }
     refreshState()
   } catch (e) {
@@ -525,6 +616,8 @@ const showAddModal = ref(false)
 const showPublishModal = ref(false)
 const showAuthModal = ref(false)
 const showProfileModal = ref(false)
+const showAboutModal = ref(false)
+const showOnboarding = ref(false)
 
 // AI 对话状态
 const aiMessages = ref([])
@@ -559,6 +652,7 @@ const authBio = ref('')
 const authGoals = ref('')
 const authSkills = ref('')
 const authInterests = ref('')
+const authError = ref('')
 
 // 个人资料编辑状态
 const editNickname = ref('')
@@ -667,6 +761,7 @@ const openAuthModal = (mode) => {
   authGoals.value = ''
   authSkills.value = ''
   authInterests.value = ''
+  authError.value = ''
   showAuthModal.value = true
 }
 
@@ -1034,6 +1129,30 @@ const handleLogout = () => {
   })
 }
 
+const handleDeleteAccount = async () => {
+  if (!isLoggedIn()) return
+  uni.showModal({
+    title: '最后确认',
+    content: '此操作不可撤销！输入"确认注销"以继续删除账号及所有数据。',
+    editable: true,
+    placeholderText: '请输入确认注销',
+    success: async (res) => {
+      if (res.confirm && res.content === '确认注销') {
+        try {
+          await api.deleteAccount()
+          clearSession()
+          refreshState()
+          uni.showToast({ title: '账号已注销', icon: 'none' })
+        } catch (err) {
+          uni.showToast({ title: err.message || '注销失败', icon: 'none' })
+        }
+      } else if (res.confirm) {
+        uni.showToast({ title: '输入不匹配，已取消注销', icon: 'none' })
+      }
+    }
+  })
+}
+
 const submitAuth = async () => {
   if (!authEmail.value.trim()) {
     uni.showToast({ title: '请输入邮箱', icon: 'none' })
@@ -1044,6 +1163,7 @@ const submitAuth = async () => {
     return
   }
 
+  authError.value = ''
   authLoading.value = true
   try {
     const isRegister = authMode.value === 'register'
@@ -1073,10 +1193,17 @@ const submitAuth = async () => {
     })
     refreshState()
     showAuthModal.value = false
-    uni.showToast({ title: isRegister ? '注册成功' : '登录成功', icon: 'success' })
-    loadServerData()
+    uni.showToast({ title: isRegister ? '注册成功，欢迎加入有序日常！' : '登录成功', icon: 'success' })
+    if (isRegister) {
+      showOnboarding.value = true
+      loadServerData(true)
+    } else {
+      loadServerData(false)
+    }
   } catch (err) {
-    uni.showToast({ title: err.message || '请求失败', icon: 'none' })
+    const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err) || '请求失败')
+    authError.value = msg
+    uni.showToast({ title: msg, icon: 'none', duration: 4000 })
   } finally {
     authLoading.value = false
   }
@@ -1141,10 +1268,11 @@ onMounted(() => {
 .modal-mask {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(12, 30, 62, 0.48);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   z-index: var(--z-modal);
   display: flex; flex-direction: column; justify-content: flex-end;
+}
+.modal-content {
+  pointer-events: auto;
 }
 .modal-content {
   background: var(--glass-bg-modal);
@@ -1447,4 +1575,16 @@ onMounted(() => {
   display: flex; justify-content: center; align-items: center;
 }
 .profile-avatar-overlay text { color: var(--color-text-inverse); font-size: var(--font-size-sm); }
+
+/* Onboarding Guide */
+.onboarding-card {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 16px 0;
+  border-bottom: 0.5px solid rgba(0,0,0,0.06);
+}
+.onboarding-card:last-child { border-bottom: none; }
+.onboarding-emoji { font-size: 32px; flex-shrink: 0; width: 40px; text-align: center; }
+.onboarding-text { flex: 1; min-width: 0; }
+.onboarding-title { font-size: 15px; font-weight: 700; color: #1f2937; display: block; margin-bottom: 4px; }
+.onboarding-desc { font-size: 13px; color: #6b7280; line-height: 1.6; }
 </style>

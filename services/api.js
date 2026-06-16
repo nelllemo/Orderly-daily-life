@@ -37,6 +37,9 @@ export const fetchProfile = () => request('/auth/profile')
 
 export const updateProfile = (payload) => request('/auth/profile', { method: 'PUT', data: payload })
 
+// Account deletion
+export const deleteAccount = () => request('/auth/account', { method: 'DELETE' })
+
 // AI Chat
 export const aiChat = (payload) => request('/ai/chat', { method: 'POST', data: payload, timeout: 60000 })
 
@@ -53,7 +56,7 @@ export const updateMoment = (id, payload) => request(`/moments/${id}`, { method:
 export const deleteMoment = (id) => request(`/moments/${id}`, { method: 'DELETE' })
 
 // AI resume generation
-export const generateResume = () => request('/ai/resume', { timeout: 15000 })
+export const generateResume = () => request('/ai/resume', { method: 'POST', data: {}, header: { 'Content-Type': 'application/json' }, timeout: 30000 })
 
 // Image upload - returns { url: '/uploads/xxx.jpg' }
 export const uploadImage = (filePath) => new Promise((resolve, reject) => {
