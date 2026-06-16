@@ -95,7 +95,10 @@ router.post('/wechat', async (req, res, next) => {
     const url = 'https://api.weixin.qq.com/sns/jscode2session'
     const r = await axios.get(url, { params: { appid, secret, js_code: code, grant_type: 'authorization_code' } })
     const data = r.data
-    if (data.errcode) return res.status(502).json({ message: data.errmsg })
+    if (data.errcode) {
+      console.error('[WeChat API Error]', data.errcode, data.errmsg)
+      return res.status(502).json({ message: 'WeChat login failed. Please try again.' })
+    }
 
     const openid = data.openid
     const rows = await db.query('SELECT id, email, nickname, avatar FROM user WHERE openid = ?', [openid])

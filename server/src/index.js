@@ -12,8 +12,13 @@ const aiRoutes = require('./routes/ai')
 const scheduleRoutes = require('./routes/schedules')
 const momentRoutes = require('./routes/moments')
 const authMiddleware = require('./middleware/auth')
+const db = require('./db')
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'replace-with-strong-secret') {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[FATAL] JWT_SECRET must be configured for production. Set a strong secret in .env')
+    process.exit(1)
+  }
   console.warn('[WARN] JWT_SECRET is not configured or using default value. Set a strong secret in .env for production.')
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 }
@@ -25,6 +30,9 @@ const dbName = process.env.DB_NAME || '(not set)'
 console.log(`[DB Config] host=${dbHost}, user=${dbUser}, database=${dbName}`)
 
 const app = express()
+
+// Trust first proxy for correct client IP behind Nginx
+app.set('trust proxy', 1)
 
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
@@ -76,6 +84,14 @@ app.use((err, req, res, _next) => {
     res.status(500).json({ message: 'Internal server error', error: err.message })
   }
 })
+
+// Verify database connection before accepting requests
+db.query('SELECT 1')
+  .then(() => console.log('[DB] Connection verified'))
+  .catch(err => {
+    console.error('[FATAL] Database connection failed:', err.message)
+    process.exit(1)
+  })
 
 const httpsPort = Number(process.env.HTTPS_PORT || 8443)
 const keyPath = process.env.SSL_KEY_PATH
