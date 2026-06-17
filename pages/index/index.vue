@@ -118,15 +118,11 @@
                   <view class="proposal-row">
                     <view class="proposal-field flex-1">
                       <text class="proposal-label">日期</text>
-                      <picker mode="date" :value="msg.proposal.date" @change="(e) => msg.proposal.date = e.detail.value">
-                        <text class="proposal-value">{{ msg.proposal.date }}</text>
-                      </picker>
+                      <input type="date" v-model="msg.proposal.date" class="native-picker" />
                     </view>
                     <view class="proposal-field flex-1">
                       <text class="proposal-label">时间</text>
-                      <picker mode="time" :value="msg.proposal.time" @change="(e) => msg.proposal.time = e.detail.value">
-                        <text class="proposal-value">{{ msg.proposal.time }}</text>
-                      </picker>
+                      <input type="time" v-model="msg.proposal.time" class="native-picker" />
                     </view>
                   </view>
                   <view class="proposal-field">
@@ -204,12 +200,8 @@
           <input type="text" placeholder="准备做什么？" class="input-title" v-model="newScheduleTitle" />
           <view class="form-row">
             <text class="row-icon">📅</text>
-            <picker mode="date" :value="newScheduleDate" @change="newScheduleDate = $event.detail.value">
-              <text class="row-text">{{ newScheduleDate }}</text>
-            </picker>
-            <picker mode="time" :value="newScheduleTime" @change="newScheduleTime = $event.detail.value">
-              <text class="row-text">{{ newScheduleTime }}</text>
-            </picker>
+            <input type="date" v-model="newScheduleDate" class="native-picker" />
+            <input type="time" v-model="newScheduleTime" class="native-picker" placeholder="选择时间" />
           </view>
           <view class="form-row">
             <text class="row-icon">📁</text>
@@ -233,9 +225,7 @@
           </view>
           <view class="form-row">
             <text class="row-icon">⏰</text>
-            <picker mode="time" :value="newScheduleRemindTime" @change="newScheduleRemindTime = $event.detail.value">
-              <text class="row-text">提醒时间 {{ newScheduleRemindTime || '未设置' }}</text>
-            </picker>
+            <input type="time" v-model="newScheduleRemindTime" class="native-picker" placeholder="未设置" />
           </view>
           <view class="form-row">
             <text class="row-icon">📍</text>
@@ -267,9 +257,7 @@
           <!-- 日期选择 -->
           <view class="form-row">
             <text class="row-icon">📅</text>
-            <picker mode="date" :value="newDynamicDate" @change="newDynamicDate = $event.detail.value">
-              <text class="row-text">{{ newDynamicDateLabel }}</text>
-            </picker>
+            <input type="date" v-model="newDynamicDate" class="native-picker" />
           </view>
 
           <!-- 图片选择区 -->
@@ -672,13 +660,6 @@ const todayTasks = computed(() =>
 const publishDateTasks = computed(() =>
   schedules.value.filter((t) => t.date === newDynamicDate.value)
 )
-
-const newDynamicDateLabel = computed(() => {
-  if (newDynamicDate.value === todayKey) return `今天 (${newDynamicDate.value})`
-  const d = new Date(newDynamicDate.value)
-  const weekDayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  return `${newDynamicDate.value} ${weekDayNames[d.getDay()]}`
-})
 
 const scheduleTitleById = computed(() => {
   const map = {}
@@ -1495,6 +1476,25 @@ onMounted(() => {
 .form-row { display: flex; align-items: center; gap: var(--space-md); }
 .row-icon { font-size: 18px; width: 24px; text-align: center; }
 .row-text { font-size: var(--font-size-md); color: var(--color-text-primary); }
+.native-picker {
+  padding: 10px 14px;
+  background: var(--color-bg-input);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+  height: 44px;
+  box-sizing: border-box;
+  outline: none;
+  -webkit-appearance: none;
+}
+.native-picker::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}
+.native-picker:focus { border-color: var(--color-primary); }
 
 .schedule-selector { display: flex; align-items: center; gap: var(--space-sm); }
 .schedule-list { display: flex; flex-direction: column; gap: var(--space-sm); }
