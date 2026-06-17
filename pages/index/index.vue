@@ -118,11 +118,11 @@
                   <view class="proposal-row">
                     <view class="proposal-field flex-1">
                       <text class="proposal-label">日期</text>
-                      <input type="date" v-model="msg.proposal.date" class="native-picker" />
+                      <input type="date" v-model="msg.proposal.date" class="native-picker" readonly @click="showPicker" />
                     </view>
                     <view class="proposal-field flex-1">
                       <text class="proposal-label">时间</text>
-                      <input type="time" v-model="msg.proposal.time" class="native-picker" />
+                      <input type="time" v-model="msg.proposal.time" class="native-picker" readonly @click="showPicker" />
                     </view>
                   </view>
                   <view class="proposal-field">
@@ -200,8 +200,8 @@
           <input type="text" placeholder="准备做什么？" class="input-title" v-model="newScheduleTitle" />
           <view class="form-row">
             <text class="row-icon">📅</text>
-            <input type="date" v-model="newScheduleDate" class="native-picker" />
-            <input type="time" v-model="newScheduleTime" class="native-picker" placeholder="选择时间" />
+            <input type="date" v-model="newScheduleDate" class="native-picker" readonly @click="showPicker" />
+            <input type="time" v-model="newScheduleTime" class="native-picker" readonly @click="showPicker" />
           </view>
           <view class="form-row">
             <text class="row-icon">📁</text>
@@ -225,7 +225,7 @@
           </view>
           <view class="form-row">
             <text class="row-icon">⏰</text>
-            <input type="time" v-model="newScheduleRemindTime" class="native-picker" placeholder="未设置" />
+            <input type="time" v-model="newScheduleRemindTime" class="native-picker" readonly @click="showPicker" />
           </view>
           <view class="form-row">
             <text class="row-icon">📍</text>
@@ -257,7 +257,7 @@
           <!-- 日期选择 -->
           <view class="form-row">
             <text class="row-icon">📅</text>
-            <input type="date" v-model="newDynamicDate" class="native-picker" />
+            <input type="date" v-model="newDynamicDate" class="native-picker" readonly @click="showPicker" />
           </view>
 
           <!-- 图片选择区 -->
@@ -679,6 +679,10 @@ const resetScheduleForm = (dateKey = todayKey) => {
   newScheduleRemark.value = ''
   newScheduleLocation.value = ''
   newScheduleRemindTime.value = ''
+}
+
+const showPicker = (e) => {
+  e.target.showPicker?.()
 }
 
 const openAIModal = () => {
@@ -1489,12 +1493,18 @@ onMounted(() => {
   box-sizing: border-box;
   outline: none;
   -webkit-appearance: none;
+  cursor: pointer;
 }
 .native-picker::-webkit-calendar-picker-indicator {
   opacity: 0.6;
   cursor: pointer;
 }
 .native-picker:focus { border-color: var(--color-primary); }
+.native-picker[readonly] {
+  user-select: none;
+  color: var(--color-text-primary);
+  background: var(--color-bg-input);
+}
 
 .schedule-selector { display: flex; align-items: center; gap: var(--space-sm); }
 .schedule-list { display: flex; flex-direction: column; gap: var(--space-sm); }
